@@ -70,7 +70,17 @@ impl AppState {
 
     pub fn apply_filter(&mut self) {
         if self.filter_query.is_empty() {
-            self.filtered_items = self.vault_items.clone();
+            // When no filter is active, show all items with starred items first
+            let mut items = self.vault_items.clone();
+            items.sort_by(|a, b| {
+                // Sort by favorite status (true before false), then by name
+                match (b.favorite, a.favorite) {
+                    (true, false) => std::cmp::Ordering::Greater,
+                    (false, true) => std::cmp::Ordering::Less,
+                    _ => a.name.to_lowercase().cmp(&b.name.to_lowercase()),
+                }
+            });
+            self.filtered_items = items;
         } else {
             let matcher = SkimMatcherV2::default();
             let query = if self.case_sensitive {
@@ -79,20 +89,35 @@ impl AppState {
                 self.filter_query.to_lowercase()
             };
 
-            self.filtered_items = self
+            // Collect items with their relevance scores
+            let mut items_with_scores: Vec<(VaultItem, i64)> = self
                 .vault_items
                 .iter()
-                .filter(|item| {
+                .filter_map(|item| {
                     let searchable_text = self.get_searchable_text(item);
                     
                     if self.fuzzy_enabled {
-                        matcher.fuzzy_match(&searchable_text, &query).is_some()
+                        matcher.fuzzy_match(&searchable_text, &query)
+                            .map(|score| (item.clone(), score))
                     } else {
-                        searchable_text.contains(&query)
+                        if searchable_text.contains(&query) {
+                            // For non-fuzzy matching, use a simple relevance score
+                            // Higher score if match is earlier in the string
+                            let position = searchable_text.find(&query).unwrap_or(searchable_text.len());
+                            let score = 1000 - position as i64;
+                            Some((item.clone(), score))
+                        } else {
+                            None
+                        }
                     }
                 })
-                .cloned()
                 .collect();
+
+            // Sort by score descending (higher scores = better matches first)
+            items_with_scores.sort_by(|a, b| b.1.cmp(&a.1));
+            
+            // Extract just the items
+            self.filtered_items = items_with_scores.into_iter().map(|(item, _)| item).collect();
         }
 
         // Reset selection if out of bounds
