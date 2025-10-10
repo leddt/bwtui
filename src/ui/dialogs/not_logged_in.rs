@@ -2,12 +2,15 @@ use crate::ui::layout::centered_rect;
 use ratatui::{
     layout::{Alignment, Constraint, Direction, Layout},
     style::{Color, Style},
-    widgets::{Block, Borders, Paragraph, Wrap},
+    widgets::{Block, Borders, Clear, Paragraph, Wrap},
     Frame,
 };
 
 pub fn render(frame: &mut Frame) {
     let area = centered_rect(70, 35, frame.size());
+    
+    // Clear the entire dialog area first
+    frame.render_widget(Clear, area);
     
     // Clear the background
     let block = Block::default()
@@ -40,13 +43,13 @@ pub fn render(frame: &mut Frame) {
     ];
     
     let message = Paragraph::new(message_text.join("\n"))
-        .style(Style::default().fg(Color::White))
+        .style(Style::default().fg(Color::White).bg(Color::Black))
         .wrap(Wrap { trim: false });
     frame.render_widget(message, chunks[0]);
     
     // Help text
     let help = Paragraph::new("Press Esc to exit")
-        .style(Style::default().fg(Color::DarkGray))
+        .style(Style::default().fg(Color::DarkGray).bg(Color::Black))
         .alignment(Alignment::Center);
     frame.render_widget(help, chunks[1]);
 }
