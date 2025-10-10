@@ -17,6 +17,7 @@ struct StatusResponse {
 }
 
 /// Bitwarden CLI wrapper
+#[derive(Clone)]
 pub struct BitwardenCli {
     session_token: Option<String>,
 }

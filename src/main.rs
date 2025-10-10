@@ -16,6 +16,7 @@ use error::Result;
 use events::{Action, EventHandler};
 use state::{AppState, MessageLevel};
 use std::time::Duration;
+use tokio::sync::mpsc;
 
 #[tokio::main]
 async fn main() -> Result<()> {
@@ -30,67 +31,13 @@ async fn main() -> Result<()> {
 }
 
 async fn run() -> Result<()> {
-    // Initialize Bitwarden CLI
-    let bw_cli = match cli::BitwardenCli::new().await {
-        Ok(cli) => cli,
-        Err(error::BwError::CliNotFound) => {
-            eprintln!("❌ Error: Bitwarden CLI not found");
-            eprintln!();
-            eprintln!("Please install the Bitwarden CLI:");
-            eprintln!("  • npm install -g @bitwarden/cli");
-            eprintln!("  • Or download from: https://bitwarden.com/help/cli/");
-            std::process::exit(1);
-        }
-        Err(e) => return Err(e),
-    };
-
-    // Check vault status
-    let status = match bw_cli.check_status().await {
-        Ok(s) => s,
-        Err(e) => {
-            eprintln!("❌ Error checking vault status: {}", e);
-            std::process::exit(1);
-        }
-    };
-
-    // Ensure vault is unlocked
-    if status != cli::VaultStatus::Unlocked {
-        eprintln!("❌ Vault is not unlocked");
-        eprintln!();
-        match status {
-            cli::VaultStatus::Unauthenticated => {
-                eprintln!("You need to log in first:");
-                eprintln!("  bw login");
-            }
-            cli::VaultStatus::Locked => {
-                eprintln!("You need to unlock your vault:");
-                eprintln!("  bw unlock");
-                eprintln!();
-                eprintln!("Then set the session token:");
-                eprintln!("  export BW_SESSION=\"your-session-token\"");
-            }
-            _ => {}
-        }
-        std::process::exit(1);
-    }
-
-    // Load vault items
-    let items = match bw_cli.list_items().await {
-        Ok(items) => items,
-        Err(e) => {
-            eprintln!("❌ Error loading vault items: {}", e);
-            std::process::exit(1);
-        }
-    };
-
-    // Initialize application state
-    let mut state = AppState::new();
-    state.load_items(items);
-
-    // Setup terminal
+    // Setup terminal FIRST - show UI immediately
     enable_raw_mode()?;
     let mut stdout = std::io::stdout();
     execute!(stdout, EnterAlternateScreen, EnableMouseCapture)?;
+
+    // Initialize application state (start empty, will load items async)
+    let mut state = AppState::new();
 
     // Initialize UI
     let mut ui = ui::UI::new()?;
@@ -107,19 +54,151 @@ async fn run() -> Result<()> {
     // Initialize event handler
     let event_handler = EventHandler::new();
 
+    // Create channel for sync results
+    let (sync_tx, mut sync_rx) = mpsc::unbounded_channel::<SyncResult>();
+    
+    // Create channel for CLI initialization result
+    let (cli_tx, mut cli_rx) = mpsc::unbounded_channel::<Result<cli::BitwardenCli>>();
+
+    // Start Bitwarden CLI initialization and vault loading in background
+    state.start_sync();
+    let sync_tx_clone = sync_tx.clone();
+    tokio::spawn(async move {
+        // Initialize Bitwarden CLI
+        let bw_cli = match cli::BitwardenCli::new().await {
+            Ok(cli) => cli,
+            Err(error::BwError::CliNotFound) => {
+                let _ = sync_tx_clone.send(SyncResult::Error(
+                    "Bitwarden CLI not found. Please install: npm install -g @bitwarden/cli".to_string()
+                ));
+                return;
+            }
+            Err(e) => {
+                let _ = sync_tx_clone.send(SyncResult::Error(format!("CLI error: {}", e)));
+                return;
+            }
+        };
+
+        // Check vault status
+        let status = match bw_cli.check_status().await {
+            Ok(s) => s,
+            Err(e) => {
+                let _ = sync_tx_clone.send(SyncResult::Error(format!("Failed to check vault status: {}", e)));
+                return;
+            }
+        };
+
+        // Ensure vault is unlocked
+        if status != cli::VaultStatus::Unlocked {
+            let error_msg = match status {
+                cli::VaultStatus::Unauthenticated => {
+                    "Vault not logged in. Please run: bw login"
+                }
+                cli::VaultStatus::Locked => {
+                    "Vault is locked. Please run: bw unlock"
+                }
+                _ => "Vault is not accessible"
+            };
+            let _ = sync_tx_clone.send(SyncResult::Error(error_msg.to_string()));
+            return;
+        }
+
+        // Send CLI instance to main thread
+        let _ = cli_tx.send(Ok(bw_cli.clone()));
+
+        // Load vault items
+        let result = match bw_cli.list_items().await {
+            Ok(items) => SyncResult::Success(items),
+            Err(e) => SyncResult::Error(format!("Failed to load vault items: {}", e)),
+        };
+        let _ = sync_tx_clone.send(result);
+    });
+
+    // We'll store the CLI instance once it's initialized
+    let mut bw_cli: Option<cli::BitwardenCli> = None;
+
     // Main event loop
     loop {
         // Clear old status messages
         state.expire_old_status();
 
+        // Advance sync animation
+        state.advance_sync_animation();
+
+        // Check for CLI initialization result
+        if let Ok(result) = cli_rx.try_recv() {
+            match result {
+                Ok(cli) => {
+                    bw_cli = Some(cli);
+                }
+                Err(e) => {
+                    state.set_status(format!("✗ {}", e), MessageLevel::Error);
+                }
+            }
+        }
+
+        // Check for sync results
+        if let Ok(result) = sync_rx.try_recv() {
+            handle_sync_result(result, &mut state);
+        }
+
         // Render UI
         ui.render(&mut state)?;
 
-        // Poll for events with 250ms timeout for UI updates
-        // This ensures TOTP countdown and other time-based displays refresh smoothly
-        if let Ok(Some(action)) = event_handler.poll_event(Duration::from_millis(250), &state) {
-            if !handle_action(action, &mut state, &bw_cli, clipboard.as_mut()).await {
+        // Poll for events with 100ms timeout for smoother animation
+        // This ensures TOTP countdown and sync animation display refresh smoothly
+        if let Ok(Some(action)) = event_handler.poll_event(Duration::from_millis(100), &state) {
+            // Always allow Quit
+            if matches!(action, Action::Quit) {
                 break;
+            }
+            
+            if let Some(ref cli) = bw_cli {
+                // CLI is ready, handle all actions
+                if !handle_action(action, &mut state, cli, clipboard.as_mut(), sync_tx.clone()).await {
+                    break;
+                }
+            } else {
+                // CLI not ready yet - only allow navigation and UI actions
+                match action {
+                    Action::MoveUp | Action::MoveDown | Action::PageUp | Action::PageDown 
+                    | Action::Home | Action::End | Action::SelectIndex(_) 
+                    | Action::SelectIndexAndShowDetails(_) | Action::AppendFilter(_) 
+                    | Action::DeleteFilterChar | Action::ClearFilter | Action::ToggleDetailsPanel 
+                    | Action::OpenDetailsPanel | Action::Tick => {
+                        // These actions don't need CLI, handle them directly
+                        match action {
+                            Action::MoveUp => state.select_previous(),
+                            Action::MoveDown => state.select_next(),
+                            Action::PageUp => state.page_up(10),
+                            Action::PageDown => state.page_down(10),
+                            Action::Home => state.jump_to_start(),
+                            Action::End => state.jump_to_end(),
+                            Action::SelectIndex(idx) => state.select_index(idx),
+                            Action::SelectIndexAndShowDetails(idx) => {
+                                state.select_index(idx);
+                                if !state.details_panel_visible {
+                                    state.toggle_details_panel();
+                                }
+                            }
+                            Action::AppendFilter(c) => state.append_filter(c),
+                            Action::DeleteFilterChar => state.delete_filter_char(),
+                            Action::ClearFilter => state.clear_filter(),
+                            Action::ToggleDetailsPanel => state.toggle_details_panel(),
+                            Action::OpenDetailsPanel => {
+                                if !state.details_panel_visible {
+                                    state.toggle_details_panel();
+                                }
+                            }
+                            Action::Tick => {},
+                            _ => {}
+                        }
+                    }
+                    _ => {
+                        // Actions that need CLI
+                        state.set_status("⏳ Please wait, initializing...", MessageLevel::Warning);
+                    }
+                }
             }
         }
     }
@@ -131,11 +210,34 @@ async fn run() -> Result<()> {
     Ok(())
 }
 
+// Result type for sync operations
+enum SyncResult {
+    Success(Vec<types::VaultItem>),
+    Error(String),
+}
+
+fn handle_sync_result(result: SyncResult, state: &mut AppState) {
+    state.stop_sync();
+    match result {
+        SyncResult::Success(items) => {
+            state.load_items(items);
+            state.set_status("✓ Vault synced successfully", MessageLevel::Success);
+        }
+        SyncResult::Error(error) => {
+            state.set_status(
+                format!("✗ Sync failed: {}", error),
+                MessageLevel::Error,
+            );
+        }
+    }
+}
+
 async fn handle_action(
     action: Action,
     state: &mut AppState,
     bw_cli: &cli::BitwardenCli,
     clipboard: Option<&mut clipboard::ClipboardManager>,
+    sync_tx: mpsc::UnboundedSender<SyncResult>,
 ) -> bool {
     match action {
         Action::Quit => {
@@ -290,30 +392,34 @@ async fn handle_action(
             }
         }
         Action::Refresh => {
-            state.set_status("⟳ Syncing with Bitwarden server...", MessageLevel::Info);
+            // Don't start a new sync if one is already in progress
+            if state.syncing {
+                state.set_status("⟳ Sync already in progress...", MessageLevel::Warning);
+                return true;
+            }
             
-            match bw_cli.sync().await {
-                Ok(_) => {
-                    match bw_cli.list_items().await {
-                        Ok(items) => {
-                            state.load_items(items);
-                            state.set_status("✓ Vault synced successfully", MessageLevel::Success);
-                        }
-                        Err(e) => {
-                            state.set_status(
-                                format!("✗ Failed to load items: {}", e),
-                                MessageLevel::Error,
-                            );
+            state.start_sync();
+            // Don't show status message here - only show the result when done
+            
+            // Clone what we need for the background task
+            let bw_cli_clone = bw_cli.clone();
+            let sync_tx_clone = sync_tx.clone();
+            
+            // Spawn sync operation in background
+            tokio::spawn(async move {
+                let result = match bw_cli_clone.sync().await {
+                    Ok(_) => {
+                        match bw_cli_clone.list_items().await {
+                            Ok(items) => SyncResult::Success(items),
+                            Err(e) => SyncResult::Error(format!("Failed to load items: {}", e)),
                         }
                     }
-                }
-                Err(e) => {
-                    state.set_status(
-                        format!("✗ Sync failed: {}", e),
-                        MessageLevel::Error,
-                    );
-                }
-            }
+                    Err(e) => SyncResult::Error(e.to_string()),
+                };
+                
+                // Send result back to main thread
+                let _ = sync_tx_clone.send(result);
+            });
         }
         Action::ToggleDetailsPanel => {
             state.toggle_details_panel();

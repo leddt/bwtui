@@ -16,6 +16,9 @@ pub struct AppState {
     pub list_area: Rect,
     pub details_panel_area: Rect,
     pub details_panel_visible: bool,
+    pub syncing: bool,
+    pub sync_animation_frame: u8,
+    pub initial_load_complete: bool,
     fuzzy_enabled: bool,
     case_sensitive: bool,
 }
@@ -51,6 +54,9 @@ impl AppState {
             list_area: Rect::default(),
             details_panel_area: Rect::default(),
             details_panel_visible: false,
+            syncing: false,
+            sync_animation_frame: 0,
+            initial_load_complete: false,
             fuzzy_enabled: true,
             case_sensitive: false,
         }
@@ -59,6 +65,7 @@ impl AppState {
     pub fn load_items(&mut self, items: Vec<VaultItem>) {
         self.vault_items = items;
         self.apply_filter();
+        self.initial_load_complete = true;
     }
 
     pub fn apply_filter(&mut self) {
@@ -226,6 +233,38 @@ impl AppState {
 
     pub fn toggle_details_panel(&mut self) {
         self.details_panel_visible = !self.details_panel_visible;
+    }
+
+    pub fn start_sync(&mut self) {
+        self.syncing = true;
+        self.sync_animation_frame = 0;
+    }
+
+    pub fn stop_sync(&mut self) {
+        self.syncing = false;
+    }
+
+    pub fn advance_sync_animation(&mut self) {
+        if self.syncing {
+            self.sync_animation_frame = (self.sync_animation_frame + 1) % 8;
+        }
+    }
+
+    pub fn sync_spinner(&self) -> &str {
+        if !self.syncing {
+            return "";
+        }
+        match self.sync_animation_frame {
+            0 => "⠋",
+            1 => "⠙",
+            2 => "⠹",
+            3 => "⠸",
+            4 => "⠼",
+            5 => "⠴",
+            6 => "⠦",
+            7 => "⠧",
+            _ => "⠋",
+        }
     }
 }
 

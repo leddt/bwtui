@@ -193,8 +193,18 @@ fn render_entry_list(frame: &mut Frame, area: Rect, state: &mut AppState) {
         })
         .collect();
 
-    let title = if state.filtered_items.is_empty() {
+    let title = if !state.initial_load_complete {
+        // Show spinner during initial load
+        format!(" {} Loading vault... ", state.sync_spinner())
+    } else if state.filtered_items.is_empty() {
         " No entries found ".to_string()
+    } else if state.syncing {
+        format!(
+            " Vault Entries ({}/{}) {} Syncing... ",
+            state.filtered_items.len(),
+            state.vault_items.len(),
+            state.sync_spinner()
+        )
     } else {
         format!(
             " Vault Entries ({}/{}) ",
@@ -203,12 +213,18 @@ fn render_entry_list(frame: &mut Frame, area: Rect, state: &mut AppState) {
         )
     };
 
+    let title_style = if state.syncing || !state.initial_load_complete {
+        Style::default().fg(Color::Cyan)
+    } else {
+        Style::default().fg(Color::White)
+    };
+
     let list = List::new(items)
         .block(
             Block::default()
                 .borders(Borders::ALL)
                 .title(title)
-                .border_style(Style::default().fg(Color::White)),
+                .border_style(title_style),
         )
         .highlight_style(
             Style::default()
