@@ -89,7 +89,7 @@ impl EventHandler {
                 // Delete character
                 (KeyCode::Backspace, _) => Some(Action::DeletePasswordChar),
                 // Quit application (Ctrl+C always works)
-                (KeyCode::Char('c'), KeyModifiers::CONTROL) => Some(Action::Quit),
+                (KeyCode::Char('q'), KeyModifiers::CONTROL) => Some(Action::Quit),
                 // Any other printable character
                 (KeyCode::Char(c), KeyModifiers::NONE) | (KeyCode::Char(c), KeyModifiers::SHIFT) => {
                     Some(Action::AppendPasswordChar(c))
@@ -108,7 +108,7 @@ impl EventHandler {
                     Some(Action::SaveTokenNo)
                 }
                 (KeyCode::Esc, _) => Some(Action::SaveTokenNo), // Esc = No
-                (KeyCode::Char('c'), KeyModifiers::CONTROL) => Some(Action::Quit),
+                (KeyCode::Char('q'), KeyModifiers::CONTROL) => Some(Action::Quit),
                 _ => None,
             };
         }
@@ -116,7 +116,7 @@ impl EventHandler {
         // Handle not logged in error popup
         if state.show_not_logged_in_error() {
             return match (key.code, key.modifiers) {
-                (KeyCode::Esc, _) | (KeyCode::Char('c'), KeyModifiers::CONTROL) => Some(Action::Quit),
+                (KeyCode::Esc, _) | (KeyCode::Char('q'), KeyModifiers::CONTROL) => Some(Action::Quit),
                 _ => None,
             };
         }
@@ -124,8 +124,7 @@ impl EventHandler {
         // Normal mode
         match (key.code, key.modifiers) {
             // Quit
-            (KeyCode::Char('c'), KeyModifiers::CONTROL) => Some(Action::Quit),
-            (KeyCode::Esc, _) => Some(Action::ClearFilter),
+            (KeyCode::Char('q'), KeyModifiers::CONTROL) => Some(Action::Quit),
             
             // Navigation - Arrow keys
             (KeyCode::Up, _) => Some(Action::MoveUp),
@@ -143,6 +142,7 @@ impl EventHandler {
             
             // Filter editing
             (KeyCode::Backspace, _) => Some(Action::DeleteFilterChar),
+            (KeyCode::Char('x'), KeyModifiers::CONTROL) => Some(Action::ClearFilter),
             
             // Open details panel (doesn't close if already open)
             (KeyCode::Enter, _) => Some(Action::OpenDetailsPanel),

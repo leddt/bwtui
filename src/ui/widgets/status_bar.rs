@@ -28,8 +28,8 @@ pub fn render(frame: &mut Frame, area: Rect, state: &AppState) {
             "^T:TOTP",
             "^D:Details",
             "^R:Refresh",
-            "ESC:Clear",
-            "^C:Quit",
+            "^X:Clear search",
+            "^Q:Quit",
         ];
 
         let mut spans = Vec::new();
@@ -70,8 +70,8 @@ pub fn calculate_height(width: u16, state: &AppState) -> u16 {
         "^T:TOTP",
         "^D:Details",
         "^R:Refresh",
-        "ESC:Clear",
-        "^C:Quit",
+        "^X:Clear search",
+        "^Q:Quit",
     ];
     
     // Account for borders (2 chars) and some padding
