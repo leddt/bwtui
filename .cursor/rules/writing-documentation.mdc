@@ -1,0 +1,7 @@
+---
+description: Rules about writing documentation
+globs:
+alwaysApply: true
+---
+If you want to write or update documentation, always put these docs in the ai_docs folder at the root of the project.
+Only write documentation that will be useful to you. Be concise and to the point. No "marketing-speak".
