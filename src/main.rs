@@ -1,7 +1,7 @@
+mod cli;
 mod clipboard;
 mod error;
 mod events;
-mod mock_data;
 mod state;
 mod totp_util;
 mod types;
@@ -30,10 +30,62 @@ async fn main() -> Result<()> {
 }
 
 async fn run() -> Result<()> {
-    // Initialize application state with mock data
+    // Initialize Bitwarden CLI
+    let bw_cli = match cli::BitwardenCli::new().await {
+        Ok(cli) => cli,
+        Err(error::BwError::CliNotFound) => {
+            eprintln!("❌ Error: Bitwarden CLI not found");
+            eprintln!();
+            eprintln!("Please install the Bitwarden CLI:");
+            eprintln!("  • npm install -g @bitwarden/cli");
+            eprintln!("  • Or download from: https://bitwarden.com/help/cli/");
+            std::process::exit(1);
+        }
+        Err(e) => return Err(e),
+    };
+
+    // Check vault status
+    let status = match bw_cli.check_status().await {
+        Ok(s) => s,
+        Err(e) => {
+            eprintln!("❌ Error checking vault status: {}", e);
+            std::process::exit(1);
+        }
+    };
+
+    // Ensure vault is unlocked
+    if status != cli::VaultStatus::Unlocked {
+        eprintln!("❌ Vault is not unlocked");
+        eprintln!();
+        match status {
+            cli::VaultStatus::Unauthenticated => {
+                eprintln!("You need to log in first:");
+                eprintln!("  bw login");
+            }
+            cli::VaultStatus::Locked => {
+                eprintln!("You need to unlock your vault:");
+                eprintln!("  bw unlock");
+                eprintln!();
+                eprintln!("Then set the session token:");
+                eprintln!("  export BW_SESSION=\"your-session-token\"");
+            }
+            _ => {}
+        }
+        std::process::exit(1);
+    }
+
+    // Load vault items
+    let items = match bw_cli.list_items().await {
+        Ok(items) => items,
+        Err(e) => {
+            eprintln!("❌ Error loading vault items: {}", e);
+            std::process::exit(1);
+        }
+    };
+
+    // Initialize application state
     let mut state = AppState::new();
-    let mock_items = mock_data::generate_mock_data();
-    state.load_items(mock_items);
+    state.load_items(items);
 
     // Setup terminal
     enable_raw_mode()?;
@@ -63,9 +115,10 @@ async fn run() -> Result<()> {
         // Render UI
         ui.render(&mut state)?;
 
-        // Poll for events with 100ms timeout for UI updates
-        if let Ok(Some(action)) = event_handler.poll_event(Duration::from_millis(100), &state) {
-            if !handle_action(action, &mut state, clipboard.as_mut()).await {
+        // Poll for events with 250ms timeout for UI updates
+        // This ensures TOTP countdown and other time-based displays refresh smoothly
+        if let Ok(Some(action)) = event_handler.poll_event(Duration::from_millis(250), &state) {
+            if !handle_action(action, &mut state, &bw_cli, clipboard.as_mut()).await {
                 break;
             }
         }
@@ -81,11 +134,16 @@ async fn run() -> Result<()> {
 async fn handle_action(
     action: Action,
     state: &mut AppState,
+    bw_cli: &cli::BitwardenCli,
     clipboard: Option<&mut clipboard::ClipboardManager>,
 ) -> bool {
     match action {
         Action::Quit => {
             return false;
+        }
+        Action::Tick => {
+            // Periodic tick for UI updates (TOTP countdown, etc.)
+            // No action needed, just triggers a render
         }
         
         // Navigation
@@ -193,6 +251,7 @@ async fn handle_action(
             if let Some(item) = state.selected_item() {
                 if let Some(login) = &item.login {
                     if let Some(totp_secret) = &login.totp {
+                        // Generate TOTP locally (much faster than CLI)
                         match totp_util::generate_totp(totp_secret) {
                             Ok((code, _remaining)) => {
                                 if let Some(cb) = clipboard {
@@ -217,9 +276,9 @@ async fn handle_action(
                                     );
                                 }
                             }
-                            Err(_) => {
+                            Err(e) => {
                                 state.set_status(
-                                    "✗ Invalid TOTP secret",
+                                    format!("✗ Failed to generate TOTP: {}", e),
                                     MessageLevel::Error,
                                 );
                             }
@@ -231,12 +290,38 @@ async fn handle_action(
             }
         }
         Action::Refresh => {
-            // In a real implementation, this would sync with Bitwarden
-            // For the prototype, we'll just show a message
-            state.set_status("✓ Vault refreshed (mock data)", MessageLevel::Success);
+            state.set_status("⟳ Syncing with Bitwarden server...", MessageLevel::Info);
+            
+            match bw_cli.sync().await {
+                Ok(_) => {
+                    match bw_cli.list_items().await {
+                        Ok(items) => {
+                            state.load_items(items);
+                            state.set_status("✓ Vault synced successfully", MessageLevel::Success);
+                        }
+                        Err(e) => {
+                            state.set_status(
+                                format!("✗ Failed to load items: {}", e),
+                                MessageLevel::Error,
+                            );
+                        }
+                    }
+                }
+                Err(e) => {
+                    state.set_status(
+                        format!("✗ Sync failed: {}", e),
+                        MessageLevel::Error,
+                    );
+                }
+            }
         }
         Action::ToggleDetailsPanel => {
             state.toggle_details_panel();
+        }
+        Action::OpenDetailsPanel => {
+            if !state.details_panel_visible {
+                state.toggle_details_panel();
+            }
         }
     }
 

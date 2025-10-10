@@ -2,6 +2,7 @@ use serde::{Deserialize, Serialize};
 use chrono::{DateTime, Utc};
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
 pub struct VaultItem {
     pub id: String,
     pub name: String,
@@ -10,38 +11,79 @@ pub struct VaultItem {
     pub login: Option<LoginData>,
     pub notes: Option<String>,
     pub favorite: bool,
+    #[serde(default)]
     pub folder_id: Option<String>,
+    #[serde(default)]
     pub organization_id: Option<String>,
     pub revision_date: DateTime<Utc>,
+    
+    // Additional fields from CLI that we don't use but need for parsing
+    #[serde(default, skip_serializing)]
+    #[allow(dead_code)]
+    pub object: Option<String>,
+    #[serde(default, skip_serializing)]
+    #[allow(dead_code)]
+    pub creation_date: Option<DateTime<Utc>>,
+    #[serde(default, skip_serializing)]
+    #[allow(dead_code)]
+    pub deleted_date: Option<DateTime<Utc>>,
+    #[serde(default, skip_serializing)]
+    #[allow(dead_code)]
+    pub password_history: Option<Vec<serde_json::Value>>,
+    #[serde(default, skip_serializing)]
+    #[allow(dead_code)]
+    pub fields: Option<Vec<serde_json::Value>>,
+    #[serde(default, skip_serializing)]
+    #[allow(dead_code)]
+    pub attachments: Option<Vec<serde_json::Value>>,
+    #[serde(default, skip_serializing)]
+    #[allow(dead_code)]
+    pub collection_ids: Option<Vec<String>>,
+    #[serde(default, skip_serializing)]
+    #[allow(dead_code)]
+    pub reprompt: Option<u8>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
-#[serde(rename_all = "lowercase")]
+#[serde(from = "u8")]
 pub enum ItemType {
-    #[serde(rename = "1")]
     Login,
-    #[serde(rename = "2")]
     SecureNote,
-    #[serde(rename = "3")]
     Card,
-    #[serde(rename = "4")]
     Identity,
 }
 
+impl From<u8> for ItemType {
+    fn from(value: u8) -> Self {
+        match value {
+            1 => ItemType::Login,
+            2 => ItemType::SecureNote,
+            3 => ItemType::Card,
+            4 => ItemType::Identity,
+            _ => ItemType::Login, // Default to Login for unknown types
+        }
+    }
+}
+
 #[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
 pub struct LoginData {
     pub username: Option<String>,
     pub password: Option<String>,
     pub totp: Option<String>,
     pub uris: Option<Vec<Uri>>,
+    
+    // Additional field from CLI
+    #[serde(default, skip_serializing)]
+    #[allow(dead_code)]
+    pub password_revision_date: Option<DateTime<Utc>>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct Uri {
-    #[serde(rename = "uri")]
-    pub value: String,
+    pub uri: String,
     #[serde(rename = "match")]
-    pub match_type: Option<u8>,
+    pub match_type: Option<serde_json::Value>,
 }
 
 impl VaultItem {
@@ -58,12 +100,12 @@ impl VaultItem {
             .and_then(|uris| uris.first())
             .map(|uri| {
                 // Extract domain from URI
-                uri.value
+                uri.uri
                     .trim_start_matches("https://")
                     .trim_start_matches("http://")
                     .split('/')
                     .next()
-                    .unwrap_or(&uri.value)
+                    .unwrap_or(&uri.uri)
                     .to_string()
             })
     }

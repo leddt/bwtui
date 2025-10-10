@@ -5,6 +5,7 @@ use crate::state::AppState;
 #[derive(Debug, Clone)]
 pub enum Action {
     Quit,
+    Tick, // Periodic update for TOTP countdown and other time-based updates
     
     // Navigation
     MoveUp,
@@ -28,6 +29,7 @@ pub enum Action {
     CopyTotp,
     Refresh,
     ToggleDetailsPanel,
+    OpenDetailsPanel,
 }
 
 pub struct EventHandler;
@@ -44,16 +46,24 @@ impl EventHandler {
                 CrosstermEvent::Key(key) => {
                     // Only process key press events, ignore key release and repeat events
                     if key.kind == KeyEventKind::Press {
-                        return Ok(self.handle_key(key, state));
+                        if let Some(action) = self.handle_key(key, state) {
+                            return Ok(Some(action));
+                        }
+                        // If no action for this key, fall through to Tick
                     }
                 }
                 CrosstermEvent::Mouse(mouse) => {
-                    return Ok(self.handle_mouse(mouse, state));
+                    if let Some(action) = self.handle_mouse(mouse, state) {
+                        return Ok(Some(action));
+                    }
+                    // If no action for this mouse event, fall through to Tick
                 }
                 _ => {}
             }
         }
-        Ok(None)
+        // Return Tick action to ensure UI refreshes periodically
+        // This is important for updating TOTP countdown and other time-based displays
+        Ok(Some(Action::Tick))
     }
 
     /// Convert key event to action (unified mode)
@@ -79,6 +89,9 @@ impl EventHandler {
             
             // Filter editing
             (KeyCode::Backspace, _) => Some(Action::DeleteFilterChar),
+            
+            // Open details panel (doesn't close if already open)
+            (KeyCode::Enter, _) => Some(Action::OpenDetailsPanel),
             
             // Actions with Ctrl modifier
             (KeyCode::Char('u'), KeyModifiers::CONTROL) => Some(Action::CopyUsername),

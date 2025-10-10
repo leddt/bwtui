@@ -22,7 +22,7 @@ The details panel shows the following information for the selected entry:
    - Live 6-digit TOTP code if configured
    - Shows countdown timer (e.g., "123456 (15s)")
    - **Mouse-clickable button**: `[ Copy ^T ]` for quick copying (also works with keyboard shortcut)
-   - Refreshes automatically as countdown reaches zero
+   - Refreshes automatically every 250ms (countdown updates smoothly, new code appears when previous expires)
    - Displays "(none)" if no TOTP is configured
    - Shows "(invalid secret)" if TOTP secret cannot be decoded
 5. **URIs**: 
@@ -74,4 +74,31 @@ The details panel shows the following information for the selected entry:
   - Only shown when field has a value
 - **Empty values**: Dark gray "(none)" text
 - **Panel border**: Cyan when active, matches entry list styling
+
+## TOTP Refresh Implementation
+- The UI refreshes every 250ms via a periodic `Tick` action
+- TOTP codes are regenerated on each render based on current system time
+- Countdown timer updates smoothly, showing remaining seconds
+- When countdown reaches 0, a new code is automatically generated
+- No user interaction required for TOTP refresh
+
+### Technical Details
+- Uses `totp_lite::totp_custom` with SHA1 algorithm
+- Time step: 30 seconds (standard TOTP period)
+- Digits: 6 (standard TOTP length)
+- The function receives the raw Unix timestamp and calculates steps internally
+- Base32 secret decoding supports both padded and unpadded formats (RFC 4648)
+
+### Bug Fix History
+- **Issue**: TOTP codes were not updating after 30 seconds, countdown would reach 0 but code stayed the same
+- **Root Cause**: Was incorrectly passing pre-calculated step count (`now / time_step`) to `totp_custom`, but the function expects the raw timestamp and handles step calculation internally
+- **Fix**: Changed to pass `now` (Unix timestamp) directly to `totp_custom` instead of `steps`
+- **Verification**: Added test `test_totp_changes_across_time_steps` to ensure codes change correctly across time boundaries
+
+### Performance Optimization
+- **Issue**: Copying TOTP with `^T` was slow (~1-2 seconds)
+- **Root Cause**: Was calling `bw get totp <id>` CLI command which spawns a new process
+- **Fix**: Changed to use local `totp_util::generate_totp()` function, same as the display code
+- **Result**: Instant TOTP copy, no CLI overhead
+- **Removed**: `BitwardenCli::get_totp()` method (no longer needed)
 

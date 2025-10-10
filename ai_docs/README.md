@@ -4,7 +4,7 @@ Fast, keyboard-driven terminal interface for Bitwarden password manager.
 
 ## Current Status
 
-**Prototype working** (~950 LOC Rust) with mock data. Production CLI integration pending.
+**Working with real Bitwarden data** (~1,100 LOC Rust) via CLI integration. Disk caching layer pending.
 
 ## Architecture
 
@@ -20,9 +20,9 @@ User Input → Event Handler → State Manager → Bitwarden CLI
 - **state.rs** - State management, filtering (fuzzy + exact match)
 - **events.rs** - Keyboard input → Actions
 - **ui.rs** - ratatui rendering (search box, entry list, details panel, status bar)
+- **cli.rs** - Bitwarden CLI integration (list, sync, TOTP)
 - **totp_util.rs** - TOTP code generation with live countdown
 - **clipboard.rs** - Cross-platform clipboard via arboard
-- **mock_data.rs** - 10 sample entries for testing
 
 ## Tech Stack
 
@@ -38,15 +38,14 @@ User Input → Event Handler → State Manager → Bitwarden CLI
 
 ## Usage
 
-### Run Prototype
-```bash
-cargo run --release
-```
+### Setup
 
-### Production (when implemented)
 ```bash
+npm install -g @bitwarden/cli
 bw login
-bwtui
+bw unlock  # Copy the session token
+export BW_SESSION="token"  # Windows: $env:BW_SESSION="token"
+cargo run --release
 ```
 
 ### Keyboard Shortcuts
@@ -106,8 +105,8 @@ fuzzy_matching = true
 
 **v1.0 (MVP)**
 - ✅ Terminal UI (prototype done)
-- ⏳ Bitwarden CLI integration
-- ⏳ Caching layer
+- ✅ Bitwarden CLI integration
+- ⏳ Disk caching layer
 - ⏳ Background refresh
 
 **v2.0+**
@@ -132,26 +131,28 @@ See ROADMAP.md for full feature planning.
 ```
 src/
 ├── main.rs        # Entry point, main loop
+├── cli.rs         # Bitwarden CLI integration
 ├── types.rs       # Data models
 ├── state.rs       # State & filtering
 ├── ui.rs          # UI rendering & details panel
 ├── events.rs      # Event handling
 ├── clipboard.rs   # Clipboard operations
 ├── totp_util.rs   # TOTP code generation
-├── mock_data.rs   # Test data
 └── error.rs       # Error types
 ```
 
 ## Documentation
 
-- **README.md** (this file) - Project overview
+- **README.md** - Project overview
 - **ARCHITECTURE.md** - Technical design
+- **CLI_INTEGRATION.md** - Bitwarden CLI integration details
 - **IMPLEMENTATION.md** - Build guide
 - **TECH_STACK.md** - Technology rationale
 - **PERFORMANCE.md** - Optimization guide
-- **DETAILS_PANEL.md** - Details panel feature guide
+- **DETAILS_PANEL.md** - Details panel feature
+- **SCROLLING.md** - Scrolling implementation
 - **ROADMAP.md** - Feature planning
-- **CONTRIBUTING.md** - Contribution guide
+- **CONTRIBUTING.md** - Contribution guidelines
 
 ## License
 

@@ -360,7 +360,7 @@ fn render_details_panel(frame: &mut Frame, area: Rect, state: &AppState) {
                     for uri in uris.iter().take(3) {
                         lines.push(Line::from(vec![
                             Span::styled("  • ", Style::default().fg(Color::DarkGray)),
-                            Span::styled(&uri.value, Style::default().fg(Color::Blue)),
+                            Span::styled(&uri.uri, Style::default().fg(Color::Blue)),
                         ]));
                     }
                     if uris.len() > 3 {
