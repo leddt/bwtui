@@ -1,0 +1,6 @@
+---
+description: Rules about checking, running and building the app
+alwaysApply: false
+---
+Always run `cargo check` after code edits. Fix all errors and warnings.
+Run `cargo test` and `cargo build` (NOT `cargo build --release`) at the end of each batch of changes.

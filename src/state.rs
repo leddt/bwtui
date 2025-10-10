@@ -1,6 +1,7 @@
 use crate::types::VaultItem;
 use fuzzy_matcher::FuzzyMatcher;
 use fuzzy_matcher::skim::SkimMatcherV2;
+use ratatui::layout::Rect;
 use ratatui::widgets::ListState;
 use std::time::Instant;
 
@@ -12,6 +13,9 @@ pub struct AppState {
     pub selected_index: usize,
     pub list_state: ListState,
     pub status_message: Option<StatusMessage>,
+    pub list_area: Rect,
+    pub details_panel_area: Rect,
+    pub details_panel_visible: bool,
     fuzzy_enabled: bool,
     case_sensitive: bool,
 }
@@ -44,6 +48,9 @@ impl AppState {
             selected_index: 0,
             list_state,
             status_message: None,
+            list_area: Rect::default(),
+            details_panel_area: Rect::default(),
+            details_panel_visible: false,
             fuzzy_enabled: true,
             case_sensitive: false,
         }
@@ -142,6 +149,13 @@ impl AppState {
         }
     }
 
+    pub fn select_index(&mut self, index: usize) {
+        if index < self.filtered_items.len() {
+            self.selected_index = index;
+            self.sync_list_state();
+        }
+    }
+
     pub fn page_up(&mut self, page_size: usize) {
         if self.selected_index >= page_size {
             self.selected_index -= page_size;
@@ -208,6 +222,10 @@ impl AppState {
                 self.status_message = None;
             }
         }
+    }
+
+    pub fn toggle_details_panel(&mut self) {
+        self.details_panel_visible = !self.details_panel_visible;
     }
 }
 

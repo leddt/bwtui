@@ -19,7 +19,8 @@ User Input → Event Handler → State Manager → Bitwarden CLI
 - **types.rs** - Data models (VaultItem, LoginData, Uri)
 - **state.rs** - State management, filtering (fuzzy + exact match)
 - **events.rs** - Keyboard input → Actions
-- **ui.rs** - ratatui rendering (search box, entry list, status bar)
+- **ui.rs** - ratatui rendering (search box, entry list, details panel, status bar)
+- **totp_util.rs** - TOTP code generation with live countdown
 - **clipboard.rs** - Cross-platform clipboard via arboard
 - **mock_data.rs** - 10 sample entries for testing
 
@@ -31,6 +32,8 @@ User Input → Event Handler → State Manager → Bitwarden CLI
 - **tokio 1.35+** - Async runtime
 - **arboard 3.3+** - Clipboard
 - **fuzzy-matcher 0.3+** - Fast fuzzy search
+- **totp-lite 2.0+** - TOTP code generation
+- **base32 0.4+** - Base32 encoding/decoding
 - **serde 1.0+** - JSON parsing for CLI output
 
 ## Usage
@@ -53,13 +56,14 @@ bwtui
 | Type any character | Filter entries |
 | Backspace | Delete from filter |
 | ESC | Clear filter |
-| ↑/↓ or Ctrl+K/J | Navigate entries |
+| ↑/↓ or ^K/^J | Navigate entries |
 | Page Up/Down | Navigate pages |
-| Ctrl+U | Copy username |
-| Ctrl+P | Copy password |
-| Ctrl+T | Copy TOTP |
-| Ctrl+R | Refresh vault |
-| Ctrl+C | Quit |
+| ^U | Copy username |
+| ^P | Copy password |
+| ^T | Copy TOTP |
+| ^D | Toggle details panel |
+| ^R | Refresh vault |
+| ^C | Quit |
 
 ## Performance
 
@@ -127,14 +131,15 @@ See ROADMAP.md for full feature planning.
 
 ```
 src/
-├── main.rs        # Entry point, main loop (229 lines)
-├── types.rs       # Data models (72 lines)
-├── state.rs       # State & filtering (196 lines)
-├── ui.rs          # UI rendering (191 lines)
-├── events.rs      # Event handling (106 lines)
-├── clipboard.rs   # Clipboard ops (40 lines)
-├── mock_data.rs   # Test data (200 lines)
-└── error.rs       # Error types (25 lines)
+├── main.rs        # Entry point, main loop
+├── types.rs       # Data models
+├── state.rs       # State & filtering
+├── ui.rs          # UI rendering & details panel
+├── events.rs      # Event handling
+├── clipboard.rs   # Clipboard operations
+├── totp_util.rs   # TOTP code generation
+├── mock_data.rs   # Test data
+└── error.rs       # Error types
 ```
 
 ## Documentation
@@ -144,6 +149,7 @@ src/
 - **IMPLEMENTATION.md** - Build guide
 - **TECH_STACK.md** - Technology rationale
 - **PERFORMANCE.md** - Optimization guide
+- **DETAILS_PANEL.md** - Details panel feature guide
 - **ROADMAP.md** - Feature planning
 - **CONTRIBUTING.md** - Contribution guide
 

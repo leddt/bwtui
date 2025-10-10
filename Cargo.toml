@@ -28,6 +28,10 @@ chrono = { version = "0.4", features = ["serde"] }
 # Filtering
 fuzzy-matcher = "0.3"
 
+# TOTP generation
+totp-lite = "2.0"
+base32 = "0.4"
+
 [profile.release]
 opt-level = 3
 lto = "fat"

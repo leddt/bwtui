@@ -3,11 +3,13 @@ mod error;
 mod events;
 mod mock_data;
 mod state;
+mod totp_util;
 mod types;
 mod ui;
 
 use crossterm::{
     execute,
+    event::{EnableMouseCapture, DisableMouseCapture},
     terminal::{disable_raw_mode, enable_raw_mode, EnterAlternateScreen, LeaveAlternateScreen},
 };
 use error::Result;
@@ -22,7 +24,7 @@ async fn main() -> Result<()> {
     
     // Ensure terminal is restored
     let _ = disable_raw_mode();
-    let _ = execute!(std::io::stdout(), LeaveAlternateScreen);
+    let _ = execute!(std::io::stdout(), LeaveAlternateScreen, DisableMouseCapture);
     
     result
 }
@@ -36,7 +38,7 @@ async fn run() -> Result<()> {
     // Setup terminal
     enable_raw_mode()?;
     let mut stdout = std::io::stdout();
-    execute!(stdout, EnterAlternateScreen)?;
+    execute!(stdout, EnterAlternateScreen, EnableMouseCapture)?;
 
     // Initialize UI
     let mut ui = ui::UI::new()?;
@@ -62,18 +64,16 @@ async fn run() -> Result<()> {
         ui.render(&mut state)?;
 
         // Poll for events with 100ms timeout for UI updates
-        if let Ok(Some(key)) = event_handler.poll_event(Duration::from_millis(100)) {
-            if let Some(action) = event_handler.handle_key(key, &state) {
-                if !handle_action(action, &mut state, clipboard.as_mut()).await {
-                    break;
-                }
+        if let Ok(Some(action)) = event_handler.poll_event(Duration::from_millis(100), &state) {
+            if !handle_action(action, &mut state, clipboard.as_mut()).await {
+                break;
             }
         }
     }
 
     // Cleanup
     disable_raw_mode()?;
-    execute!(std::io::stdout(), LeaveAlternateScreen)?;
+    execute!(std::io::stdout(), LeaveAlternateScreen, DisableMouseCapture)?;
 
     Ok(())
 }
@@ -106,6 +106,15 @@ async fn handle_action(
         }
         Action::End => {
             state.jump_to_end();
+        }
+        Action::SelectIndex(index) => {
+            state.select_index(index);
+        }
+        Action::SelectIndexAndShowDetails(index) => {
+            state.select_index(index);
+            if !state.details_panel_visible {
+                state.toggle_details_panel();
+            }
         }
         
         // Filter actions
@@ -183,31 +192,37 @@ async fn handle_action(
         Action::CopyTotp => {
             if let Some(item) = state.selected_item() {
                 if let Some(login) = &item.login {
-                    if login.totp.is_some() {
-                        // In a real implementation, this would generate the TOTP code
-                        // For the prototype, we'll show a simulated code
-                        let simulated_totp = "123456";
-                        
-                        if let Some(cb) = clipboard {
-                            match cb.copy(simulated_totp) {
-                                Ok(_) => {
+                    if let Some(totp_secret) = &login.totp {
+                        match totp_util::generate_totp(totp_secret) {
+                            Ok((code, _remaining)) => {
+                                if let Some(cb) = clipboard {
+                                    match cb.copy(&code) {
+                                        Ok(_) => {
+                                            state.set_status(
+                                                format!("✓ TOTP code copied: {}", code),
+                                                MessageLevel::Success,
+                                            );
+                                        }
+                                        Err(_) => {
+                                            state.set_status(
+                                                "✗ Failed to copy to clipboard",
+                                                MessageLevel::Error,
+                                            );
+                                        }
+                                    }
+                                } else {
                                     state.set_status(
-                                        format!("✓ TOTP code copied: {}", simulated_totp),
-                                        MessageLevel::Success,
-                                    );
-                                }
-                                Err(_) => {
-                                    state.set_status(
-                                        "✗ Failed to copy to clipboard",
+                                        "✗ Clipboard not available",
                                         MessageLevel::Error,
                                     );
                                 }
                             }
-                        } else {
-                            state.set_status(
-                                "✗ Clipboard not available",
-                                MessageLevel::Error,
-                            );
+                            Err(_) => {
+                                state.set_status(
+                                    "✗ Invalid TOTP secret",
+                                    MessageLevel::Error,
+                                );
+                            }
                         }
                     } else {
                         state.set_status("✗ No TOTP configured for this entry", MessageLevel::Warning);
@@ -219,6 +234,9 @@ async fn handle_action(
             // In a real implementation, this would sync with Bitwarden
             // For the prototype, we'll just show a message
             state.set_status("✓ Vault refreshed (mock data)", MessageLevel::Success);
+        }
+        Action::ToggleDetailsPanel => {
+            state.toggle_details_panel();
         }
     }
 
