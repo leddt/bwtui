@@ -1,3 +1,4 @@
+mod cache;
 mod cli;
 mod clipboard;
 mod error;
@@ -38,6 +39,24 @@ async fn run() -> Result<()> {
 
     // Initialize application state (start empty, will load items async)
     let mut state = AppState::new();
+
+    // Try to load cache immediately for instant UI population
+    match cache::load_cache() {
+        Ok(Some(cached_data)) => {
+            let cached_items = cached_data.to_vault_items();
+            state.load_cached_items(cached_items);
+            state.set_status(
+                format!("✓ Loaded {} items from cache (syncing in background...)", cached_data.items.len()),
+                MessageLevel::Info,
+            );
+        }
+        Ok(None) => {
+            // No cache available, will load from vault
+        }
+        Err(_e) => {
+            // Failed to load cache, will load from vault
+        }
+    }
 
     // Initialize UI
     let mut ui = ui::UI::new()?;
@@ -364,7 +383,12 @@ fn handle_sync_result(result: SyncResult, state: &mut AppState) {
     state.stop_sync();
     match result {
         SyncResult::Success(items) => {
-            state.load_items(items);
+            // Save cache (without secrets)
+            let cache_data = cache::CachedVaultData::from_vault_items(&items);
+            let _ = cache::save_cache(&cache_data); // Ignore cache save errors
+
+            // Load items with secrets available
+            state.load_items_with_secrets(items);
             state.set_status("✓ Vault synced successfully", MessageLevel::Success);
         }
         SyncResult::Error(error) => {
@@ -463,6 +487,14 @@ async fn handle_action(
             }
         }
         Action::CopyPassword => {
+            if !state.secrets_available {
+                state.set_status(
+                    "⏳ Please wait, loading vault secrets...",
+                    MessageLevel::Warning,
+                );
+                return true;
+            }
+            
             if let Some(item) = state.selected_item() {
                 if let Some(login) = &item.login {
                     if let Some(password) = &login.password {
@@ -494,6 +526,14 @@ async fn handle_action(
             }
         }
         Action::CopyTotp => {
+            if !state.secrets_available {
+                state.set_status(
+                    "⏳ Please wait, loading vault secrets...",
+                    MessageLevel::Warning,
+                );
+                return true;
+            }
+            
             if let Some(item) = state.selected_item() {
                 if let Some(login) = &item.login {
                     if let Some(totp_secret) = &login.totp {

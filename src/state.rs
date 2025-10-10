@@ -19,6 +19,7 @@ pub struct AppState {
     pub syncing: bool,
     pub sync_animation_frame: u8,
     pub initial_load_complete: bool,
+    pub secrets_available: bool,  // True when real vault data is loaded, false for cached data
     pub password_input_mode: bool,
     pub password_input: String,
     pub unlock_error: Option<String>,
@@ -63,6 +64,7 @@ impl AppState {
             syncing: false,
             sync_animation_frame: 0,
             initial_load_complete: false,
+            secrets_available: false,
             password_input_mode: false,
             password_input: String::new(),
             unlock_error: None,
@@ -74,10 +76,20 @@ impl AppState {
         }
     }
 
-    pub fn load_items(&mut self, items: Vec<VaultItem>) {
+    /// Load items from cache (without secrets)
+    pub fn load_cached_items(&mut self, items: Vec<VaultItem>) {
         self.vault_items = items;
         self.apply_filter();
         self.initial_load_complete = true;
+        self.secrets_available = false;
+    }
+
+    /// Load items with full data including secrets
+    pub fn load_items_with_secrets(&mut self, items: Vec<VaultItem>) {
+        self.vault_items = items;
+        self.apply_filter();
+        self.initial_load_complete = true;
+        self.secrets_available = true;
     }
 
     pub fn apply_filter(&mut self) {

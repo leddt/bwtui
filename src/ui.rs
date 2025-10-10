@@ -327,8 +327,14 @@ fn render_details_panel(frame: &mut Frame, area: Rect, state: &AppState) {
             }
             lines.push(Line::from(""));
             
-            // Password (masked)
-            if login.password.is_some() {
+            // Password (masked or loading)
+            if !state.secrets_available {
+                // Show loading spinner when secrets are not yet available
+                lines.push(Line::from(vec![
+                    Span::styled("Password: ", Style::default().fg(Color::Cyan).add_modifier(Modifier::BOLD)),
+                    Span::styled(format!("{} Loading...", state.sync_spinner()), Style::default().fg(Color::Yellow)),
+                ]));
+            } else if login.password.is_some() {
                 lines.push(Line::from(vec![
                     Span::styled("Password: ", Style::default().fg(Color::Cyan).add_modifier(Modifier::BOLD)),
                     Span::styled("••••••••", Style::default().fg(Color::Yellow)),
@@ -347,8 +353,14 @@ fn render_details_panel(frame: &mut Frame, area: Rect, state: &AppState) {
             }
             lines.push(Line::from(""));
             
-            // TOTP
-            if let Some(totp_secret) = &login.totp {
+            // TOTP (or loading)
+            if !state.secrets_available {
+                // Show loading spinner when secrets are not yet available
+                lines.push(Line::from(vec![
+                    Span::styled("TOTP: ", Style::default().fg(Color::Cyan).add_modifier(Modifier::BOLD)),
+                    Span::styled(format!("{} Loading...", state.sync_spinner()), Style::default().fg(Color::Yellow)),
+                ]));
+            } else if let Some(totp_secret) = &login.totp {
                 match totp_util::generate_totp(totp_secret) {
                     Ok((code, remaining)) => {
                         lines.push(Line::from(vec![
@@ -399,8 +411,14 @@ fn render_details_panel(frame: &mut Frame, area: Rect, state: &AppState) {
             }
         }
         
-        // Notes
-        if let Some(notes) = &item.notes {
+        // Notes (or loading)
+        if !state.secrets_available {
+            // Show loading spinner when secrets are not yet available
+            lines.push(Line::from(vec![
+                Span::styled("Notes: ", Style::default().fg(Color::Cyan).add_modifier(Modifier::BOLD)),
+                Span::styled(format!("{} Loading...", state.sync_spinner()), Style::default().fg(Color::Yellow)),
+            ]));
+        } else if let Some(notes) = &item.notes {
             if !notes.is_empty() {
                 lines.push(Line::from(Span::styled("Notes: ", Style::default().fg(Color::Cyan).add_modifier(Modifier::BOLD))));
                 lines.push(Line::from(""));
