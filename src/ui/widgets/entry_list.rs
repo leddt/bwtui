@@ -1,4 +1,6 @@
 use crate::state::AppState;
+use crate::ui::widgets::clickable::{Clickable, is_click_in_area};
+use crossterm::event::MouseEvent;
 use ratatui::{
     layout::Rect,
     style::{Color, Modifier, Style},
@@ -111,5 +113,37 @@ pub fn render(frame: &mut Frame, area: Rect, state: &mut AppState) {
         );
 
     frame.render_stateful_widget(list, area, &mut state.vault.list_state);
+}
+
+/// Entry list click handler
+pub struct EntryListClickHandler;
+
+impl Clickable for EntryListClickHandler {
+    fn handle_click(&self, mouse: MouseEvent, state: &AppState, area: Rect) -> Option<crate::events::Action> {
+        if !is_click_in_area(mouse, area) {
+            return None;
+        }
+
+        // Calculate relative position within the list
+        let relative_y = mouse.row - area.y;
+        
+        // Account for the border (1 line at top)
+        if relative_y > 0 {
+            let item_index_in_view = (relative_y - 1) as usize;
+            
+            // Get the current scroll offset from the list state
+            let scroll_offset = state.vault.list_state.offset();
+            
+            // Calculate the absolute index in the filtered list
+            let absolute_index = scroll_offset + item_index_in_view;
+            
+            // Only select if it's a valid item
+            if absolute_index < state.vault.filtered_items.len() {
+                return Some(crate::events::Action::SelectIndexAndShowDetails(absolute_index));
+            }
+        }
+        
+        None
+    }
 }
 

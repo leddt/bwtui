@@ -1,6 +1,6 @@
-mod widgets;
-mod dialogs;
-mod layout;
+pub mod widgets;
+pub mod dialogs;
+pub mod layout;
 
 use crate::error::Result;
 use crate::state::AppState;
