@@ -1,52 +1,23 @@
 use crate::types::VaultItem;
 use fuzzy_matcher::FuzzyMatcher;
 use fuzzy_matcher::skim::SkimMatcherV2;
-use ratatui::layout::Rect;
 use ratatui::widgets::ListState;
-use std::time::Instant;
 
+/// State related to vault items, filtering, and selection
 #[derive(Debug)]
-pub struct AppState {
+pub struct VaultState {
     pub vault_items: Vec<VaultItem>,
     pub filtered_items: Vec<VaultItem>,
     pub filter_query: String,
     pub selected_index: usize,
     pub list_state: ListState,
-    pub status_message: Option<StatusMessage>,
-    pub list_area: Rect,
-    pub details_panel_area: Rect,
-    pub details_panel_visible: bool,
-    pub syncing: bool,
-    pub sync_animation_frame: u8,
     pub initial_load_complete: bool,
-    pub secrets_available: bool,  // True when real vault data is loaded, false for cached data
-    pub password_input_mode: bool,
-    pub password_input: String,
-    pub unlock_error: Option<String>,
-    pub offer_save_token: bool,
-    pub save_token_response: Option<bool>, // Some(true) = yes, Some(false) = no, None = not answered yet
-    pub show_not_logged_in_error: bool,
+    pub secrets_available: bool,
     fuzzy_enabled: bool,
     case_sensitive: bool,
 }
 
-#[derive(Debug)]
-pub struct StatusMessage {
-    pub text: String,
-    pub level: MessageLevel,
-    pub timestamp: Instant,
-}
-
-#[derive(Debug, Clone, Copy)]
-#[allow(dead_code)]
-pub enum MessageLevel {
-    Info,
-    Success,
-    Warning,
-    Error,
-}
-
-impl AppState {
+impl VaultState {
     pub fn new() -> Self {
         let mut list_state = ListState::default();
         list_state.select(Some(0));
@@ -57,20 +28,8 @@ impl AppState {
             filter_query: String::new(),
             selected_index: 0,
             list_state,
-            status_message: None,
-            list_area: Rect::default(),
-            details_panel_area: Rect::default(),
-            details_panel_visible: false,
-            syncing: false,
-            sync_animation_frame: 0,
             initial_load_complete: false,
             secrets_available: false,
-            password_input_mode: false,
-            password_input: String::new(),
-            unlock_error: None,
-            offer_save_token: false,
-            save_token_response: None,
-            show_not_logged_in_error: false,
             fuzzy_enabled: true,
             case_sensitive: false,
         }
@@ -262,108 +221,9 @@ impl AppState {
         self.filter_query.clear();
         self.apply_filter();
     }
-
-    pub fn set_status(&mut self, text: impl Into<String>, level: MessageLevel) {
-        self.status_message = Some(StatusMessage {
-            text: text.into(),
-            level,
-            timestamp: Instant::now(),
-        });
-    }
-
-    /// Check if status message is older than 3 seconds and clear it
-    pub fn expire_old_status(&mut self) {
-        if let Some(status) = &self.status_message {
-            if status.timestamp.elapsed().as_secs() > 3 {
-                self.status_message = None;
-            }
-        }
-    }
-
-    pub fn toggle_details_panel(&mut self) {
-        self.details_panel_visible = !self.details_panel_visible;
-    }
-
-    pub fn start_sync(&mut self) {
-        self.syncing = true;
-        self.sync_animation_frame = 0;
-    }
-
-    pub fn stop_sync(&mut self) {
-        self.syncing = false;
-    }
-
-    pub fn advance_sync_animation(&mut self) {
-        if self.syncing {
-            self.sync_animation_frame = (self.sync_animation_frame + 1) % 8;
-        }
-    }
-
-    pub fn sync_spinner(&self) -> &str {
-        if !self.syncing {
-            return "";
-        }
-        match self.sync_animation_frame {
-            0 => "⠋",
-            1 => "⠙",
-            2 => "⠹",
-            3 => "⠸",
-            4 => "⠼",
-            5 => "⠴",
-            6 => "⠦",
-            7 => "⠧",
-            _ => "⠋",
-        }
-    }
-
-    pub fn enter_password_mode(&mut self) {
-        self.password_input_mode = true;
-        self.password_input.clear();
-        self.unlock_error = None;
-    }
-
-    pub fn exit_password_mode(&mut self) {
-        self.password_input_mode = false;
-        self.password_input.clear();
-        self.unlock_error = None;
-    }
-
-    pub fn append_password_char(&mut self, c: char) {
-        self.password_input.push(c);
-    }
-
-    pub fn delete_password_char(&mut self) {
-        self.password_input.pop();
-    }
-
-    pub fn get_password(&self) -> String {
-        self.password_input.clone()
-    }
-
-    pub fn set_unlock_error(&mut self, error: String) {
-        self.unlock_error = Some(error);
-    }
-
-    pub fn enter_save_token_prompt(&mut self) {
-        self.offer_save_token = true;
-        self.save_token_response = None;
-    }
-
-    pub fn set_save_token_response(&mut self, response: bool) {
-        self.save_token_response = Some(response);
-    }
-
-    pub fn exit_save_token_prompt(&mut self) {
-        self.offer_save_token = false;
-        self.save_token_response = None;
-    }
-
-    pub fn show_not_logged_in_popup(&mut self) {
-        self.show_not_logged_in_error = true;
-    }
 }
 
-impl Default for AppState {
+impl Default for VaultState {
     fn default() -> Self {
         Self::new()
     }

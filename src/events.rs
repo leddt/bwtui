@@ -79,7 +79,7 @@ impl EventHandler {
     /// Convert key event to action (unified mode)
     fn handle_key(&self, key: KeyEvent, state: &AppState) -> Option<Action> {
         // Handle password input mode
-        if state.password_input_mode {
+        if state.password_input_mode() {
             return match (key.code, key.modifiers) {
                 // Submit password
                 (KeyCode::Enter, _) => Some(Action::SubmitPassword),
@@ -98,7 +98,7 @@ impl EventHandler {
         }
 
         // Handle save token prompt
-        if state.offer_save_token {
+        if state.offer_save_token() {
             return match (key.code, key.modifiers) {
                 (KeyCode::Char('y'), KeyModifiers::NONE) | (KeyCode::Char('Y'), KeyModifiers::NONE) | (KeyCode::Char('Y'), KeyModifiers::SHIFT) => {
                     Some(Action::SaveTokenYes)
@@ -113,7 +113,7 @@ impl EventHandler {
         }
 
         // Handle not logged in error popup
-        if state.show_not_logged_in_error {
+        if state.show_not_logged_in_error() {
             return match (key.code, key.modifiers) {
                 (KeyCode::Esc, _) | (KeyCode::Char('c'), KeyModifiers::CONTROL) => Some(Action::Quit),
                 _ => None,
@@ -166,11 +166,11 @@ impl EventHandler {
     fn handle_mouse(&self, mouse: MouseEvent, state: &AppState) -> Option<Action> {
         match mouse.kind {
             MouseEventKind::Down(crossterm::event::MouseButton::Left) => {
-                let list_area = state.list_area;
-                let details_area = state.details_panel_area;
+                let list_area = state.ui.list_area;
+                let details_area = state.ui.details_panel_area;
                 
                 // Check if click is within the details panel (if visible)
-                if state.details_panel_visible 
+                if state.details_panel_visible() 
                     && mouse.column >= details_area.x 
                     && mouse.column < details_area.x + details_area.width
                     && mouse.row >= details_area.y
@@ -196,13 +196,13 @@ impl EventHandler {
                         let item_index_in_view = (relative_y - 1) as usize;
                         
                         // Get the current scroll offset from the list state
-                        let scroll_offset = state.list_state.offset();
+                        let scroll_offset = state.vault.list_state.offset();
                         
                         // Calculate the absolute index in the filtered list
                         let absolute_index = scroll_offset + item_index_in_view;
                         
                         // Only select if it's a valid item
-                        if absolute_index < state.filtered_items.len() {
+                        if absolute_index < state.vault.filtered_items.len() {
                             return Some(Action::SelectIndexAndShowDetails(absolute_index));
                         }
                     }
