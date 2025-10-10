@@ -60,16 +60,20 @@ async fn run() -> Result<()> {
     // Create channel for CLI initialization result
     let (cli_tx, mut cli_rx) = mpsc::unbounded_channel::<Result<cli::BitwardenCli>>();
 
+    // Create channel for unlock results
+    let (unlock_tx, mut unlock_rx) = mpsc::unbounded_channel::<UnlockResult>();
+
     // Start Bitwarden CLI initialization and vault loading in background
     state.start_sync();
     let sync_tx_clone = sync_tx.clone();
+    let unlock_tx_clone = unlock_tx.clone();
     tokio::spawn(async move {
         // Initialize Bitwarden CLI
         let bw_cli = match cli::BitwardenCli::new().await {
             Ok(cli) => cli,
             Err(error::BwError::CliNotFound) => {
                 let _ = sync_tx_clone.send(SyncResult::Error(
-                    "Bitwarden CLI not found. Please install: npm install -g @bitwarden/cli".to_string()
+                    "Bitwarden CLI not found. Please install: npm install-g @bitwarden/cli".to_string()
                 ));
                 return;
             }
@@ -88,34 +92,33 @@ async fn run() -> Result<()> {
             }
         };
 
-        // Ensure vault is unlocked
-        if status != cli::VaultStatus::Unlocked {
-            let error_msg = match status {
-                cli::VaultStatus::Unauthenticated => {
-                    "Vault not logged in. Please run: bw login"
-                }
-                cli::VaultStatus::Locked => {
-                    "Vault is locked. Please run: bw unlock"
-                }
-                _ => "Vault is not accessible"
-            };
-            let _ = sync_tx_clone.send(SyncResult::Error(error_msg.to_string()));
-            return;
+        // Handle vault status
+        match status {
+            cli::VaultStatus::Unlocked => {
+                // Already unlocked, proceed normally
+                let _ = cli_tx.send(Ok(bw_cli.clone()));
+                let result = match bw_cli.list_items().await {
+                    Ok(items) => SyncResult::Success(items),
+                    Err(e) => SyncResult::Error(format!("Failed to load vault items: {}", e)),
+                };
+                let _ = sync_tx_clone.send(result);
+            }
+            cli::VaultStatus::Locked => {
+                // Vault is locked - prompt for password
+                let _ = unlock_tx_clone.send(UnlockResult::PasswordRequired(bw_cli));
+            }
+            cli::VaultStatus::Unauthenticated => {
+                // Vault is not logged in - show error popup
+                let _ = unlock_tx_clone.send(UnlockResult::NotLoggedIn);
+            }
         }
-
-        // Send CLI instance to main thread
-        let _ = cli_tx.send(Ok(bw_cli.clone()));
-
-        // Load vault items
-        let result = match bw_cli.list_items().await {
-            Ok(items) => SyncResult::Success(items),
-            Err(e) => SyncResult::Error(format!("Failed to load vault items: {}", e)),
-        };
-        let _ = sync_tx_clone.send(result);
     });
 
     // We'll store the CLI instance once it's initialized
     let mut bw_cli: Option<cli::BitwardenCli> = None;
+    
+    // Store session token if user wants to save it
+    let mut session_token_to_save: Option<String> = None;
 
     // Main event loop
     loop {
@@ -137,6 +140,36 @@ async fn run() -> Result<()> {
             }
         }
 
+        // Check for unlock results
+        if let Ok(result) = unlock_rx.try_recv() {
+            match result {
+                UnlockResult::PasswordRequired(cli) => {
+                    // Store the CLI temporarily and prompt for password
+                    bw_cli = Some(cli);
+                    state.stop_sync();
+                    state.enter_password_mode();
+                }
+                UnlockResult::Success(token, cli) => {
+                    // Vault unlocked successfully
+                    bw_cli = Some(cli.clone());
+                    state.exit_password_mode();
+                    
+                    // Store token and offer to save it
+                    session_token_to_save = Some(token);
+                    state.enter_save_token_prompt();
+                }
+                UnlockResult::Error(error) => {
+                    // Unlock failed
+                    state.set_unlock_error(error);
+                }
+                UnlockResult::NotLoggedIn => {
+                    // Vault is not logged in - show error popup
+                    state.stop_sync();
+                    state.show_not_logged_in_popup();
+                }
+            }
+        }
+
         // Check for sync results
         if let Ok(result) = sync_rx.try_recv() {
             handle_sync_result(result, &mut state);
@@ -151,6 +184,109 @@ async fn run() -> Result<()> {
             // Always allow Quit
             if matches!(action, Action::Quit) {
                 break;
+            }
+
+            // Handle password input actions
+            if state.password_input_mode {
+                match action {
+                    Action::AppendPasswordChar(c) => {
+                        state.append_password_char(c);
+                    }
+                    Action::DeletePasswordChar => {
+                        state.delete_password_char();
+                    }
+                    Action::SubmitPassword => {
+                        // Get the password and attempt unlock
+                        let password = state.get_password();
+                        if password.is_empty() {
+                            state.set_unlock_error("Password cannot be empty".to_string());
+                        } else {
+                            // Attempt unlock in background
+                            if let Some(ref cli) = bw_cli {
+                                let cli_clone = cli.clone();
+                                let unlock_tx_clone = unlock_tx.clone();
+                                tokio::spawn(async move {
+                                    match cli_clone.unlock(&password).await {
+                                        Ok(token) => {
+                                            let new_cli = cli::BitwardenCli::with_session_token(token.clone());
+                                            let _ = unlock_tx_clone.send(UnlockResult::Success(token, new_cli));
+                                        }
+                                        Err(e) => {
+                                            let _ = unlock_tx_clone.send(UnlockResult::Error(e.to_string()));
+                                        }
+                                    }
+                                });
+                            }
+                        }
+                    }
+                    Action::CancelPasswordInput => {
+                        // If user cancels unlock, exit the app since they can't proceed
+                        break;
+                    }
+                    Action::Tick => {},
+                    _ => {}
+                }
+                continue;
+            }
+
+            // Handle save token prompt actions
+            if state.offer_save_token {
+                match action {
+                    Action::SaveTokenYes => {
+                        state.set_save_token_response(true);
+                        state.exit_save_token_prompt();
+                        
+                        // Save the token
+                        if let Some(token) = &session_token_to_save {
+                            match save_session_token(token) {
+                                Ok(()) => {
+                                    state.set_status("✓ Session token saved successfully", MessageLevel::Success);
+                                }
+                                Err(e) => {
+                                    state.set_status(format!("⚠ Failed to save token: {}", e), MessageLevel::Warning);
+                                }
+                            }
+                        }
+                        session_token_to_save = None;
+
+                        // Now load vault items
+                        if let Some(ref cli) = bw_cli {
+                            state.start_sync();
+                            let cli_clone = cli.clone();
+                            let sync_tx_clone = sync_tx.clone();
+                            tokio::spawn(async move {
+                                let result = match cli_clone.list_items().await {
+                                    Ok(items) => SyncResult::Success(items),
+                                    Err(e) => SyncResult::Error(format!("Failed to load vault items: {}", e)),
+                                };
+                                let _ = sync_tx_clone.send(result);
+                            });
+                        }
+                    }
+                    Action::SaveTokenNo => {
+                        state.set_save_token_response(false);
+                        state.exit_save_token_prompt();
+                        state.set_status("Session token not saved", MessageLevel::Info);
+                        session_token_to_save = None;
+
+                        // Load vault items anyway
+                        if let Some(ref cli) = bw_cli {
+                            state.start_sync();
+                            let cli_clone = cli.clone();
+                            let sync_tx_clone = sync_tx.clone();
+                            tokio::spawn(async move {
+                                let result = match cli_clone.list_items().await {
+                                    Ok(items) => SyncResult::Success(items),
+                                    Err(e) => SyncResult::Error(format!("Failed to load vault items: {}", e)),
+                                };
+                                let _ = sync_tx_clone.send(result);
+                            });
+                        }
+                    }
+                    Action::Tick => {},
+                    _ => {}
+                }
+                continue;
             }
             
             if let Some(ref cli) = bw_cli {
@@ -214,6 +350,14 @@ async fn run() -> Result<()> {
 enum SyncResult {
     Success(Vec<types::VaultItem>),
     Error(String),
+}
+
+// Result type for unlock operations
+enum UnlockResult {
+    PasswordRequired(cli::BitwardenCli),
+    Success(String, cli::BitwardenCli), // (session_token, cli_with_token)
+    Error(String),
+    NotLoggedIn,
 }
 
 fn handle_sync_result(result: SyncResult, state: &mut AppState) {
@@ -429,8 +573,151 @@ async fn handle_action(
                 state.toggle_details_panel();
             }
         }
+
+        // Password input actions (should not reach here, but handle for completeness)
+        Action::SubmitPassword | Action::CancelPasswordInput 
+        | Action::AppendPasswordChar(_) | Action::DeletePasswordChar => {
+            // These are handled in the main event loop before calling handle_action
+        }
+
+        // Save token actions (should not reach here, but handle for completeness)
+        Action::SaveTokenYes | Action::SaveTokenNo => {
+            // These are handled in the main event loop before calling handle_action
+        }
     }
 
     true
+}
+
+/// Save session token to system user environment variable
+fn save_session_token(token: &str) -> Result<()> {
+    #[cfg(target_os = "windows")]
+    {
+        use std::process::Command;
+        
+        // Use setx to set persistent user environment variable on Windows
+        let output = Command::new("setx")
+            .arg("BW_SESSION")
+            .arg(token)
+            .output()
+            .map_err(|e| error::BwError::CommandFailed(format!("Failed to run setx: {}", e)))?;
+        
+        if !output.status.success() {
+            let stderr = String::from_utf8_lossy(&output.stderr);
+            return Err(error::BwError::CommandFailed(format!(
+                "Failed to set environment variable: {}",
+                stderr.trim()
+            )));
+        }
+        
+        // Also set in current process so it's available immediately
+        std::env::set_var("BW_SESSION", token);
+        
+        Ok(())
+    }
+    
+    #[cfg(target_os = "macos")]
+    {
+        use std::process::Command;
+        
+        // On macOS, use launchctl to set persistent user environment variable
+        let output = Command::new("launchctl")
+            .arg("setenv")
+            .arg("BW_SESSION")
+            .arg(token)
+            .output()
+            .map_err(|e| error::BwError::CommandFailed(format!("Failed to run launchctl: {}", e)))?;
+        
+        if !output.status.success() {
+            let stderr = String::from_utf8_lossy(&output.stderr);
+            return Err(error::BwError::CommandFailed(format!(
+                "Failed to set environment variable: {}",
+                stderr.trim()
+            )));
+        }
+        
+        // Also set in current process
+        std::env::set_var("BW_SESSION", token);
+        
+        Ok(())
+    }
+    
+    #[cfg(all(unix, not(target_os = "macos")))]
+    {
+        use std::process::Command;
+        
+        // Try systemd user environment first (most modern Linux systems)
+        let systemd_result = Command::new("systemctl")
+            .arg("--user")
+            .arg("set-environment")
+            .arg(format!("BW_SESSION={}", token))
+            .output();
+        
+        if let Ok(output) = systemd_result {
+            if output.status.success() {
+                // Also set in current process
+                std::env::set_var("BW_SESSION", token);
+                return Ok(());
+            }
+        }
+        
+        // Fallback: Write to ~/.profile which is more standard across shells
+        use std::io::Write;
+        
+        let home = std::env::var("HOME")
+            .map_err(|_| error::BwError::CommandFailed("Could not determine home directory".to_string()))?;
+        
+        let profile_path = format!("{}/.profile", home);
+        
+        // Read existing profile
+        let mut content = if std::path::Path::new(&profile_path).exists() {
+            std::fs::read_to_string(&profile_path)
+                .map_err(|e| error::BwError::IoError(e))?
+        } else {
+            String::new()
+        };
+        
+        // Check if BW_SESSION is already set
+        let bw_session_marker = "# bwtui - Bitwarden session token";
+        let has_existing = content.contains(bw_session_marker);
+        
+        if has_existing {
+            // Replace existing BW_SESSION line
+            let lines: Vec<&str> = content.lines().collect();
+            let mut new_lines = Vec::new();
+            let mut skip_next = false;
+            
+            for line in lines {
+                if line.contains(bw_session_marker) {
+                    skip_next = true;
+                    continue;
+                }
+                if skip_next && line.trim().starts_with("export BW_SESSION") {
+                    skip_next = false;
+                    continue;
+                }
+                new_lines.push(line);
+            }
+            
+            content = new_lines.join("\n");
+        }
+        
+        // Append new BW_SESSION
+        if !content.is_empty() && !content.ends_with('\n') {
+            content.push('\n');
+        }
+        content.push_str(&format!("\n{}\nexport BW_SESSION=\"{}\"\n", bw_session_marker, token));
+        
+        // Write back to profile
+        let mut file = std::fs::File::create(&profile_path)
+            .map_err(|e| error::BwError::IoError(e))?;
+        file.write_all(content.as_bytes())
+            .map_err(|e| error::BwError::IoError(e))?;
+        
+        // Also set in current process
+        std::env::set_var("BW_SESSION", token);
+        
+        Ok(())
+    }
 }
 

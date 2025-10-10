@@ -30,6 +30,16 @@ pub enum Action {
     Refresh,
     ToggleDetailsPanel,
     OpenDetailsPanel,
+
+    // Password input actions
+    SubmitPassword,
+    CancelPasswordInput,
+    AppendPasswordChar(char),
+    DeletePasswordChar,
+
+    // Save token actions
+    SaveTokenYes,
+    SaveTokenNo,
 }
 
 pub struct EventHandler;
@@ -67,7 +77,50 @@ impl EventHandler {
     }
 
     /// Convert key event to action (unified mode)
-    fn handle_key(&self, key: KeyEvent, _state: &AppState) -> Option<Action> {
+    fn handle_key(&self, key: KeyEvent, state: &AppState) -> Option<Action> {
+        // Handle password input mode
+        if state.password_input_mode {
+            return match (key.code, key.modifiers) {
+                // Submit password
+                (KeyCode::Enter, _) => Some(Action::SubmitPassword),
+                // Cancel
+                (KeyCode::Esc, _) => Some(Action::CancelPasswordInput),
+                // Delete character
+                (KeyCode::Backspace, _) => Some(Action::DeletePasswordChar),
+                // Quit application (Ctrl+C always works)
+                (KeyCode::Char('c'), KeyModifiers::CONTROL) => Some(Action::Quit),
+                // Any other printable character
+                (KeyCode::Char(c), KeyModifiers::NONE) | (KeyCode::Char(c), KeyModifiers::SHIFT) => {
+                    Some(Action::AppendPasswordChar(c))
+                }
+                _ => None,
+            };
+        }
+
+        // Handle save token prompt
+        if state.offer_save_token {
+            return match (key.code, key.modifiers) {
+                (KeyCode::Char('y'), KeyModifiers::NONE) | (KeyCode::Char('Y'), KeyModifiers::NONE) | (KeyCode::Char('Y'), KeyModifiers::SHIFT) => {
+                    Some(Action::SaveTokenYes)
+                }
+                (KeyCode::Char('n'), KeyModifiers::NONE) | (KeyCode::Char('N'), KeyModifiers::NONE) | (KeyCode::Char('N'), KeyModifiers::SHIFT) => {
+                    Some(Action::SaveTokenNo)
+                }
+                (KeyCode::Esc, _) => Some(Action::SaveTokenNo), // Esc = No
+                (KeyCode::Char('c'), KeyModifiers::CONTROL) => Some(Action::Quit),
+                _ => None,
+            };
+        }
+
+        // Handle not logged in error popup
+        if state.show_not_logged_in_error {
+            return match (key.code, key.modifiers) {
+                (KeyCode::Esc, _) | (KeyCode::Char('c'), KeyModifiers::CONTROL) => Some(Action::Quit),
+                _ => None,
+            };
+        }
+
+        // Normal mode
         match (key.code, key.modifiers) {
             // Quit
             (KeyCode::Char('c'), KeyModifiers::CONTROL) => Some(Action::Quit),

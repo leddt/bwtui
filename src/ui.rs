@@ -58,6 +58,15 @@ impl UI {
             }
             
             render_status_bar(frame, chunks[2], state);
+
+            // Render password input dialog, save token prompt, or not logged in error on top if active
+            if state.password_input_mode {
+                render_password_dialog(frame, state);
+            } else if state.offer_save_token {
+                render_save_token_prompt(frame, state);
+            } else if state.show_not_logged_in_error {
+                render_not_logged_in_dialog(frame);
+            }
         })?;
 
         Ok(())
@@ -432,6 +441,177 @@ fn render_details_panel(frame: &mut Frame, area: Rect, state: &AppState) {
     };
     
     frame.render_widget(content, area);
+}
+
+fn render_password_dialog(frame: &mut Frame, state: &AppState) {
+    let area = centered_rect(60, 40, frame.size());
+    
+    // Clear the background
+    let block = Block::default()
+        .borders(Borders::ALL)
+        .border_style(Style::default().fg(Color::Cyan))
+        .title(" Unlock Vault ")
+        .style(Style::default().bg(Color::Black));
+    
+    frame.render_widget(block.clone(), area);
+    
+    // Split into content area
+    let inner = block.inner(area);
+    let chunks = Layout::default()
+        .direction(Direction::Vertical)
+        .constraints([
+            Constraint::Length(2),  // Instructions
+            Constraint::Length(1),  // Spacing
+            Constraint::Length(3),  // Password input
+            Constraint::Length(1),  // Spacing
+            Constraint::Min(0),     // Error message (if any)
+            Constraint::Length(2),  // Help text
+        ])
+        .split(inner);
+    
+    // Instructions
+    let instructions = Paragraph::new("Enter your master password to unlock the vault:")
+        .style(Style::default().fg(Color::White))
+        .wrap(Wrap { trim: false });
+    frame.render_widget(instructions, chunks[0]);
+    
+    // Password input box
+    let password_display = "•".repeat(state.password_input.len());
+    let password_widget = Paragraph::new(password_display)
+        .style(Style::default().fg(Color::Yellow))
+        .block(
+            Block::default()
+                .borders(Borders::ALL)
+                .border_style(Style::default().fg(Color::Yellow))
+                .title(" Password "),
+        );
+    frame.render_widget(password_widget, chunks[2]);
+    
+    // Error message if any
+    if let Some(error) = &state.unlock_error {
+        let error_widget = Paragraph::new(error.as_str())
+            .style(Style::default().fg(Color::Red))
+            .wrap(Wrap { trim: false });
+        frame.render_widget(error_widget, chunks[4]);
+    }
+    
+    // Help text
+    let help = Paragraph::new("Press Enter to submit, Esc to cancel")
+        .style(Style::default().fg(Color::DarkGray))
+        .alignment(Alignment::Center);
+    frame.render_widget(help, chunks[5]);
+}
+
+fn render_save_token_prompt(frame: &mut Frame, _state: &AppState) {
+    let area = centered_rect(70, 35, frame.size());
+    
+    // Clear the background
+    let block = Block::default()
+        .borders(Borders::ALL)
+        .border_style(Style::default().fg(Color::Green))
+        .title(" Save Session Token ")
+        .style(Style::default().bg(Color::Black));
+    
+    frame.render_widget(block.clone(), area);
+    
+    // Split into content area
+    let inner = block.inner(area);
+    let chunks = Layout::default()
+        .direction(Direction::Vertical)
+        .constraints([
+            Constraint::Min(0),     // Message
+            Constraint::Length(2),  // Options
+        ])
+        .split(inner);
+    
+    // Message
+    let message_text = vec![
+        "Vault unlocked successfully!",
+        "",
+        "Would you like to save the session token to the BW_SESSION",
+        "environment variable? This will keep you logged in between",
+        "app executions and system restarts.",
+        "",
+        "Note: The token will be saved as a persistent user environment",
+        "variable and will be available in all future sessions.",
+    ];
+    
+    let message = Paragraph::new(message_text.join("\n"))
+        .style(Style::default().fg(Color::White))
+        .wrap(Wrap { trim: false });
+    frame.render_widget(message, chunks[0]);
+    
+    // Options
+    let options = Paragraph::new("Press Y to save, N to skip")
+        .style(Style::default().fg(Color::Yellow).add_modifier(Modifier::BOLD))
+        .alignment(Alignment::Center);
+    frame.render_widget(options, chunks[1]);
+}
+
+fn render_not_logged_in_dialog(frame: &mut Frame) {
+    let area = centered_rect(70, 35, frame.size());
+    
+    // Clear the background
+    let block = Block::default()
+        .borders(Borders::ALL)
+        .border_style(Style::default().fg(Color::Red))
+        .title(" Vault Not Logged In ")
+        .style(Style::default().bg(Color::Black));
+    
+    frame.render_widget(block.clone(), area);
+    
+    // Split into content area
+    let inner = block.inner(area);
+    let chunks = Layout::default()
+        .direction(Direction::Vertical)
+        .constraints([
+            Constraint::Min(0),     // Message
+            Constraint::Length(2),  // Help text
+        ])
+        .split(inner);
+    
+    // Message
+    let message_text = vec![
+        "Your Bitwarden vault is not logged in.",
+        "",
+        "Please run the following command to log in:",
+        "",
+        "    bw login",
+        "",
+        "After logging in, restart this application.",
+    ];
+    
+    let message = Paragraph::new(message_text.join("\n"))
+        .style(Style::default().fg(Color::White))
+        .wrap(Wrap { trim: false });
+    frame.render_widget(message, chunks[0]);
+    
+    // Help text
+    let help = Paragraph::new("Press Esc to exit")
+        .style(Style::default().fg(Color::DarkGray))
+        .alignment(Alignment::Center);
+    frame.render_widget(help, chunks[1]);
+}
+
+/// Helper function to create a centered rect
+fn centered_rect(percent_x: u16, percent_y: u16, r: Rect) -> Rect {
+    let popup_layout = Layout::default()
+        .direction(Direction::Vertical)
+        .constraints([
+            Constraint::Percentage((100 - percent_y) / 2),
+            Constraint::Percentage(percent_y),
+            Constraint::Percentage((100 - percent_y) / 2),
+        ])
+        .split(r);
+
+    Layout::default()
+        .direction(Direction::Horizontal)
+        .constraints([
+            Constraint::Percentage((100 - percent_x) / 2),
+            Constraint::Percentage(percent_x),
+            Constraint::Percentage((100 - percent_x) / 2),
+        ])
+        .split(popup_layout[1])[1]
 }
 
 #[cfg(test)]

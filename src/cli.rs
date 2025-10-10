@@ -143,5 +143,54 @@ impl BitwardenCli {
         let status = self.check_status().await?;
         Ok(status == VaultStatus::Unlocked)
     }
+
+    /// Unlock vault with password and return session token
+    pub async fn unlock(&self, password: &str) -> Result<String> {
+        let mut cmd = Command::new("bw");
+        cmd.arg("unlock")
+            .arg("--raw")
+            .arg(password)
+            .stdin(Stdio::null())
+            .stdout(Stdio::piped())
+            .stderr(Stdio::piped());
+
+        let output = cmd
+            .output()
+            .await
+            .map_err(|e| BwError::CommandFailed(format!("Failed to execute bw unlock: {}", e)))?;
+
+        if !output.status.success() {
+            let stderr = String::from_utf8_lossy(&output.stderr);
+            
+            // Check for common error messages
+            if stderr.contains("Invalid master password") {
+                return Err(BwError::CommandFailed("Invalid master password".to_string()));
+            } else if stderr.contains("not logged in") {
+                return Err(BwError::NotLoggedIn);
+            }
+            
+            return Err(BwError::CommandFailed(format!(
+                "Failed to unlock vault: {}",
+                stderr.trim()
+            )));
+        }
+
+        let session_token = String::from_utf8_lossy(&output.stdout).trim().to_string();
+        
+        if session_token.is_empty() {
+            return Err(BwError::CommandFailed(
+                "Unlock succeeded but no session token was returned".to_string()
+            ));
+        }
+
+        Ok(session_token)
+    }
+
+    /// Create a new instance with a specific session token
+    pub fn with_session_token(token: String) -> Self {
+        Self {
+            session_token: Some(token),
+        }
+    }
 }
 
