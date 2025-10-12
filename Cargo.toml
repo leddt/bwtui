@@ -36,6 +36,14 @@ base32 = "0.4"
 bincode = "1.3"
 dirs = "5.0"
 
+# Platform-specific encryption
+keyring = "2.3"
+whoami = "1.5"
+
+[target.'cfg(windows)'.dependencies]
+# Windows DPAPI for fallback encryption
+winapi = { version = "0.3", features = ["dpapi", "wincrypt"] }
+
 [profile.release]
 opt-level = 3
 lto = "fat"

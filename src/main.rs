@@ -48,7 +48,7 @@ async fn run() -> Result<()> {
     // Initialize UI, event handler, and session manager
     let mut ui = ui::UI::new()?;
     let event_handler = EventHandler::new();
-    let session_manager = SessionManager::new();
+    let session_manager = SessionManager::new()?;
 
     // Main event loop
     loop {

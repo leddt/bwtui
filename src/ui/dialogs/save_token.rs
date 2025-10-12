@@ -36,12 +36,12 @@ pub fn render(frame: &mut Frame, _state: &AppState) {
     let message_text = vec![
         "Vault unlocked successfully!",
         "",
-        "Would you like to save the session token to the BW_SESSION",
-        "environment variable? This will keep you logged in between",
-        "app executions and system restarts.",
+        "Would you like to save the session token securely?",
+        "This will keep you logged in between app executions",
+        "and system restarts.",
         "",
-        "Note: The token will be saved as a persistent user environment",
-        "variable and will be available in all future sessions.",
+        "The token will be encrypted using your system's secure",
+        "storage. Only you will be able to access it.",
     ];
     
     let message = Paragraph::new(message_text.join("\n"))

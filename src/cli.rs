@@ -1,4 +1,5 @@
 use crate::error::{BwError, Result};
+use crate::session::SessionManager;
 use crate::types::VaultItem;
 use serde::Deserialize;
 use std::process::Stdio;
@@ -38,8 +39,9 @@ impl BitwardenCli {
             return Err(BwError::CliNotFound);
         }
 
-        // Check for session token in environment
-        let session_token = std::env::var("BW_SESSION").ok();
+        // Load session token from encrypted storage
+        let session_manager = SessionManager::new()?;
+        let session_token = session_manager.load_token()?;
 
         Ok(Self { session_token })
     }
