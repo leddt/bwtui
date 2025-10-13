@@ -39,6 +39,9 @@ jobs:
           sudo apt-get update
           sudo apt-get install -y gcc-mingw-w64-x86-64
 
+      - name: Add Windows target to Rust
+        run: rustup target add x86_64-pc-windows-gnu
+
       - name: Build for Linux (x86_64)
         run: cargo build --release --target x86_64-unknown-linux-gnu
 
