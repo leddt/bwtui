@@ -1,19 +1,19 @@
 use crate::state::{AppState, MessageLevel};
 use ratatui::{
     layout::{Alignment, Rect},
-    style::{Color, Style},
     text::{Line, Span},
     widgets::{Block, Borders, Paragraph, Wrap},
     Frame,
 };
+use crate::ui::theme;
 
 pub fn render(frame: &mut Frame, area: Rect, state: &AppState) {
     let status_text = if let Some(status_msg) = &state.status_message {
         let style = match status_msg.level {
-            MessageLevel::Info => Style::default().fg(Color::Cyan),
-            MessageLevel::Success => Style::default().fg(Color::Green),
-            MessageLevel::Warning => Style::default().fg(Color::Yellow),
-            MessageLevel::Error => Style::default().fg(Color::Red),
+            MessageLevel::Info => theme::title_active(),
+            MessageLevel::Success => theme::success(),
+            MessageLevel::Warning => theme::warning(),
+            MessageLevel::Error => theme::danger(),
         };
 
         Paragraph::new(status_msg.text.as_str())
@@ -34,21 +34,24 @@ pub fn render(frame: &mut Frame, area: Rect, state: &AppState) {
 
         let mut spans = Vec::new();
         for (i, binding) in bindings.iter().enumerate() {
-            spans.push(Span::styled(*binding, Style::default().fg(Color::DarkGray)));
+            spans.push(Span::styled(*binding, theme::muted()));
             if i < bindings.len() - 1 {
-                spans.push(Span::styled(" | ", Style::default().fg(Color::DarkGray)));
+                spans.push(Span::styled(" | ", theme::muted()));
             }
         }
 
         Paragraph::new(Line::from(spans))
-            .style(Style::default().fg(Color::DarkGray))
+            .style(theme::muted())
             .alignment(Alignment::Center)
             .wrap(Wrap { trim: false })
     };
 
     let block = Block::default()
         .borders(Borders::ALL)
-        .border_style(Style::default().fg(Color::DarkGray));
+        .border_type(theme::BORDER_TYPE)
+        .title(" Help ")
+        .title_style(theme::title())
+        .border_style(theme::muted());
 
     let inner = block.inner(area);
     frame.render_widget(block, area);

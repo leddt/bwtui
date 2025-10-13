@@ -3,11 +3,11 @@ use crate::ui::widgets::clickable::{Clickable, is_click_in_area};
 use crossterm::event::MouseEvent;
 use ratatui::{
     layout::Rect,
-    style::{Color, Modifier, Style},
     text::{Line, Span},
     widgets::{Block, Borders, List, ListItem},
     Frame,
 };
+use crate::ui::theme;
 
 pub fn render(frame: &mut Frame, area: Rect, state: &mut AppState) {
     let items: Vec<ListItem> = state
@@ -17,14 +17,7 @@ pub fn render(frame: &mut Frame, area: Rect, state: &mut AppState) {
         .map(|(idx, item)| {
             let is_selected = idx == state.vault.selected_index;
             
-            let style = if is_selected {
-                Style::default()
-                    .fg(Color::Black)
-                    .bg(Color::Cyan)
-                    .add_modifier(Modifier::BOLD)
-            } else {
-                Style::default().fg(Color::White)
-            };
+            let style = if is_selected { theme::list_item_selected() } else { theme::list_item() };
 
             // Build display text
             let mut spans = vec![
@@ -36,7 +29,7 @@ pub fn render(frame: &mut Frame, area: Rect, state: &mut AppState) {
 
             // Add favorite indicator
             if item.favorite {
-                spans.push(Span::styled("★ ", Style::default().fg(Color::Yellow)));
+                spans.push(Span::styled("★ ", theme::warning()));
             }
 
             // Add item name
@@ -47,11 +40,7 @@ pub fn render(frame: &mut Frame, area: Rect, state: &mut AppState) {
                 spans.push(Span::styled(" ", style));
                 spans.push(Span::styled(
                     format!("({})", username),
-                    if is_selected {
-                        Style::default().fg(Color::Black).bg(Color::Cyan)
-                    } else {
-                        Style::default().fg(Color::DarkGray)
-                    },
+                    if is_selected { theme::list_item_selected() } else { theme::muted() },
                 ));
             }
 
@@ -60,11 +49,7 @@ pub fn render(frame: &mut Frame, area: Rect, state: &mut AppState) {
                 spans.push(Span::styled(" ", style));
                 spans.push(Span::styled(
                     "[2FA]",
-                    if is_selected {
-                        Style::default().fg(Color::Black).bg(Color::Cyan)
-                    } else {
-                        Style::default().fg(Color::Green)
-                    },
+                    if is_selected { theme::list_item_selected() } else { theme::success() },
                 ));
             }
 
@@ -72,7 +57,7 @@ pub fn render(frame: &mut Frame, area: Rect, state: &mut AppState) {
         })
         .collect();
 
-    let title = if !state.initial_load_complete() {
+    let mut title = if !state.initial_load_complete() {
         // Show spinner during initial load
         format!(" {} Loading vault... ", state.sync_spinner())
     } else if state.vault.filtered_items.is_empty() {
@@ -92,25 +77,37 @@ pub fn render(frame: &mut Frame, area: Rect, state: &mut AppState) {
         )
     };
 
+    // Add scroll indicators based on current offset and visible rows
+    let inner_rows = area.height.saturating_sub(2) as usize; // account for borders
+    let offset = state.vault.list_state.offset();
+    if !state.vault.filtered_items.is_empty() && inner_rows > 0 {
+        let has_more_above = offset > 0;
+        let has_more_below = offset + inner_rows < state.vault.filtered_items.len();
+        if has_more_above || has_more_below {
+            title.push(' ');
+            if has_more_above { title.push('⇡'); }
+            if has_more_above && has_more_below { title.push(' '); }
+            if has_more_below { title.push('⇣'); }
+            title.push(' ');
+        }
+    }
+
     let title_style = if state.syncing() || !state.initial_load_complete() {
-        Style::default().fg(Color::Cyan)
+        theme::title_active()
     } else {
-        Style::default().fg(Color::White)
+        theme::title()
     };
 
     let list = List::new(items)
         .block(
             Block::default()
                 .borders(Borders::ALL)
+                .border_type(theme::BORDER_TYPE)
                 .title(title)
+                .title_style(title_style)
                 .border_style(title_style),
         )
-        .highlight_style(
-            Style::default()
-                .fg(Color::Black)
-                .bg(Color::Cyan)
-                .add_modifier(Modifier::BOLD),
-        );
+        .highlight_style(theme::list_item_selected());
 
     frame.render_stateful_widget(list, area, &mut state.vault.list_state);
 }

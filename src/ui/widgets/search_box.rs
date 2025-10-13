@@ -1,16 +1,16 @@
 use crate::state::AppState;
 use ratatui::{
     layout::Rect,
-    style::{Color, Style},
     widgets::{Block, Borders, Paragraph},
     Frame,
 };
+use crate::ui::theme;
 
 pub fn render(frame: &mut Frame, area: Rect, state: &AppState) {
     let style = if state.vault.filter_query.is_empty() {
-        Style::default().fg(Color::DarkGray)
+        theme::placeholder()
     } else {
-        Style::default().fg(Color::Yellow)
+        theme::input_active()
     };
 
     let filter_text = if state.vault.filter_query.is_empty() {
@@ -24,7 +24,9 @@ pub fn render(frame: &mut Frame, area: Rect, state: &AppState) {
         .block(
             Block::default()
                 .borders(Borders::ALL)
+                .border_type(theme::BORDER_TYPE)
                 .title(" Search ")
+                .title_style(theme::title_active())
                 .border_style(style),
         );
 

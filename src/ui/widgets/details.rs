@@ -4,11 +4,12 @@ use crate::ui::widgets::clickable::{Clickable, is_click_in_area};
 use crossterm::event::MouseEvent;
 use ratatui::{
     layout::Rect,
-    style::{Color, Modifier, Style},
+    style::{Color, Style},
     text::{Line, Span},
     widgets::{Block, Borders, Paragraph, Wrap},
     Frame,
 };
+use crate::ui::theme;
 
 pub fn render(frame: &mut Frame, area: Rect, state: &AppState) {
     let selected_item = state.selected_item();
@@ -18,8 +19,8 @@ pub fn render(frame: &mut Frame, area: Rect, state: &AppState) {
         
         // Title/Name
         lines.push(Line::from(vec![
-            Span::styled("Name: ", Style::default().fg(Color::Cyan).add_modifier(Modifier::BOLD)),
-            Span::styled(&item.name, Style::default().fg(Color::White)),
+            Span::styled("Name: ", theme::label()),
+            Span::styled(&item.name, theme::value()),
         ]));
         lines.push(Line::from(""));
         
@@ -27,14 +28,14 @@ pub fn render(frame: &mut Frame, area: Rect, state: &AppState) {
         if let Some(login) = &item.login {
             if let Some(username) = &login.username {
                 lines.push(Line::from(vec![
-                    Span::styled("Username: ", Style::default().fg(Color::Cyan).add_modifier(Modifier::BOLD)),
-                    Span::styled(username, Style::default().fg(Color::White)),
-                    Span::styled(" [^U]", Style::default().fg(Color::DarkGray)),
+                    Span::styled("Username: ", theme::label()),
+                    Span::styled(username, theme::value()),
+                    Span::styled(" [^U]", theme::muted()),
                 ]));
             } else {
                 lines.push(Line::from(vec![
-                    Span::styled("Username: ", Style::default().fg(Color::Cyan).add_modifier(Modifier::BOLD)),
-                    Span::styled("(none)", Style::default().fg(Color::DarkGray)),
+                    Span::styled("Username: ", theme::label()),
+                    Span::styled("(none)", theme::muted()),
                 ]));
             }
             lines.push(Line::from(""));
@@ -43,19 +44,19 @@ pub fn render(frame: &mut Frame, area: Rect, state: &AppState) {
             if !state.secrets_available() {
                 // Show loading spinner when secrets are not yet available
                 lines.push(Line::from(vec![
-                    Span::styled("Password: ", Style::default().fg(Color::Cyan).add_modifier(Modifier::BOLD)),
-                    Span::styled(format!("{} Loading...", state.sync_spinner()), Style::default().fg(Color::Yellow)),
+                    Span::styled("Password: ", theme::label()),
+                    Span::styled(format!("{} Loading...", state.sync_spinner()), theme::warning()),
                 ]));
             } else if login.password.is_some() {
                 lines.push(Line::from(vec![
-                    Span::styled("Password: ", Style::default().fg(Color::Cyan).add_modifier(Modifier::BOLD)),
-                    Span::styled("••••••••", Style::default().fg(Color::Yellow)),
-                    Span::styled(" [^P]", Style::default().fg(Color::DarkGray)),
+                    Span::styled("Password: ", theme::label()),
+                    Span::styled("••••••••", theme::warning()),
+                    Span::styled(" [^P]", theme::muted()),
                 ]));
             } else {
                 lines.push(Line::from(vec![
-                    Span::styled("Password: ", Style::default().fg(Color::Cyan).add_modifier(Modifier::BOLD)),
-                    Span::styled("(none)", Style::default().fg(Color::DarkGray)),
+                    Span::styled("Password: ", theme::label()),
+                    Span::styled("(none)", theme::muted()),
                 ]));
             }
             lines.push(Line::from(""));
@@ -64,30 +65,30 @@ pub fn render(frame: &mut Frame, area: Rect, state: &AppState) {
             if !state.secrets_available() {
                 // Show loading spinner when secrets are not yet available
                 lines.push(Line::from(vec![
-                    Span::styled("TOTP: ", Style::default().fg(Color::Cyan).add_modifier(Modifier::BOLD)),
-                    Span::styled(format!("{} Loading...", state.sync_spinner()), Style::default().fg(Color::Yellow)),
+                    Span::styled("TOTP: ", theme::label()),
+                    Span::styled(format!("{} Loading...", state.sync_spinner()), theme::warning()),
                 ]));
             } else if let Some(totp_secret) = &login.totp {
                 match totp_util::generate_totp(totp_secret) {
                     Ok((code, remaining)) => {
                         lines.push(Line::from(vec![
-                            Span::styled("TOTP: ", Style::default().fg(Color::Cyan).add_modifier(Modifier::BOLD)),
-                            Span::styled(code, Style::default().fg(Color::Green).add_modifier(Modifier::BOLD)),
-                            Span::styled(format!(" ({}s)", remaining), Style::default().fg(Color::DarkGray)),
-                            Span::styled(" [^T]", Style::default().fg(Color::DarkGray)),
+                            Span::styled("TOTP: ", theme::label()),
+                            Span::styled(code, theme::success()),
+                            Span::styled(format!(" ({}s)", remaining), theme::muted()),
+                            Span::styled(" [^T]", theme::muted()),
                         ]));
                     }
                     Err(_) => {
                         lines.push(Line::from(vec![
-                            Span::styled("TOTP: ", Style::default().fg(Color::Cyan).add_modifier(Modifier::BOLD)),
-                            Span::styled("(invalid secret)", Style::default().fg(Color::Red)),
+                            Span::styled("TOTP: ", theme::label()),
+                            Span::styled("(invalid secret)", theme::danger()),
                         ]));
                     }
                 }
             } else {
                 lines.push(Line::from(vec![
-                    Span::styled("TOTP: ", Style::default().fg(Color::Cyan).add_modifier(Modifier::BOLD)),
-                    Span::styled("(none)", Style::default().fg(Color::DarkGray)),
+                    Span::styled("TOTP: ", theme::label()),
+                    Span::styled("(none)", theme::muted()),
                 ]));
             }
             lines.push(Line::from(""));
@@ -95,17 +96,17 @@ pub fn render(frame: &mut Frame, area: Rect, state: &AppState) {
             // URIs
             if let Some(uris) = &login.uris {
                 if !uris.is_empty() {
-                    lines.push(Line::from(Span::styled("URIs: ", Style::default().fg(Color::Cyan).add_modifier(Modifier::BOLD))));
+                    lines.push(Line::from(Span::styled("URIs: ", theme::label())));
                     for uri in uris.iter().take(3) {
                         lines.push(Line::from(vec![
-                            Span::styled("  • ", Style::default().fg(Color::DarkGray)),
+                            Span::styled("  • ", theme::muted()),
                             Span::styled(&uri.uri, Style::default().fg(Color::Blue)),
                         ]));
                     }
                     if uris.len() > 3 {
                         lines.push(Line::from(Span::styled(
                             format!("  ... and {} more", uris.len() - 3),
-                            Style::default().fg(Color::DarkGray),
+                            theme::muted(),
                         )));
                     }
                     lines.push(Line::from(""));
@@ -117,17 +118,17 @@ pub fn render(frame: &mut Frame, area: Rect, state: &AppState) {
         if !state.secrets_available() {
             // Show loading spinner when secrets are not yet available
             lines.push(Line::from(vec![
-                Span::styled("Notes: ", Style::default().fg(Color::Cyan).add_modifier(Modifier::BOLD)),
-                Span::styled(format!("{} Loading...", state.sync_spinner()), Style::default().fg(Color::Yellow)),
+                Span::styled("Notes: ", theme::label()),
+                Span::styled(format!("{} Loading...", state.sync_spinner()), theme::warning()),
             ]));
         } else if let Some(notes) = &item.notes {
             if !notes.is_empty() {
-                lines.push(Line::from(Span::styled("Notes: ", Style::default().fg(Color::Cyan).add_modifier(Modifier::BOLD))));
+                lines.push(Line::from(Span::styled("Notes: ", theme::label())));
                 lines.push(Line::from(""));
                 
                 // Split notes by newlines and display
                 for line in notes.lines().take(10) {
-                    lines.push(Line::from(Span::styled(line, Style::default().fg(Color::White))));
+                    lines.push(Line::from(Span::styled(line, theme::value())));
                 }
                 
                 let note_lines = notes.lines().count();
@@ -135,7 +136,7 @@ pub fn render(frame: &mut Frame, area: Rect, state: &AppState) {
                     lines.push(Line::from(""));
                     lines.push(Line::from(Span::styled(
                         format!("... and {} more lines", note_lines - 10),
-                        Style::default().fg(Color::DarkGray),
+                        theme::muted(),
                     )));
                 }
             }
@@ -145,18 +146,22 @@ pub fn render(frame: &mut Frame, area: Rect, state: &AppState) {
             .block(
                 Block::default()
                     .borders(Borders::ALL)
+                    .border_type(theme::BORDER_TYPE)
                     .title(" Details ")
-                    .border_style(Style::default().fg(Color::Cyan)),
+                    .title_style(theme::title_active())
+                    .border_style(theme::title_active()),
             )
             .wrap(Wrap { trim: false })
     } else {
         Paragraph::new("No item selected")
-            .style(Style::default().fg(Color::DarkGray))
+            .style(theme::muted())
             .block(
                 Block::default()
                     .borders(Borders::ALL)
+                    .border_type(theme::BORDER_TYPE)
                     .title(" Details ")
-                    .border_style(Style::default().fg(Color::DarkGray)),
+                    .title_style(theme::title())
+                    .border_style(theme::muted()),
             )
     };
     
