@@ -10,7 +10,11 @@ use ratatui::{
     Frame,
 };
 
-pub fn render(frame: &mut Frame, area: Rect, state: &AppState) {
+pub fn render(frame: &mut Frame, area: Rect, state: &mut AppState) {
+    // Calculate max scroll first
+    let max_scroll = calculate_max_scroll(state, area);
+    state.set_details_max_scroll(max_scroll);
+    
     let selected_item = state.selected_item();
     
     let content = if let Some(item) = selected_item {
@@ -96,17 +100,11 @@ pub fn render(frame: &mut Frame, area: Rect, state: &AppState) {
             if let Some(uris) = &login.uris {
                 if !uris.is_empty() {
                     lines.push(Line::from(Span::styled("URIs: ", Style::default().fg(Color::Cyan).add_modifier(Modifier::BOLD))));
-                    for uri in uris.iter().take(3) {
+                    for uri in uris.iter() {
                         lines.push(Line::from(vec![
                             Span::styled("  • ", Style::default().fg(Color::DarkGray)),
                             Span::styled(&uri.uri, Style::default().fg(Color::Blue)),
                         ]));
-                    }
-                    if uris.len() > 3 {
-                        lines.push(Line::from(Span::styled(
-                            format!("  ... and {} more", uris.len() - 3),
-                            Style::default().fg(Color::DarkGray),
-                        )));
                     }
                     lines.push(Line::from(""));
                 }
@@ -125,23 +123,43 @@ pub fn render(frame: &mut Frame, area: Rect, state: &AppState) {
                 lines.push(Line::from(Span::styled("Notes: ", Style::default().fg(Color::Cyan).add_modifier(Modifier::BOLD))));
                 lines.push(Line::from(""));
                 
-                // Split notes by newlines and display
-                for line in notes.lines().take(10) {
+                // Split notes by newlines and display all lines
+                for line in notes.lines() {
                     lines.push(Line::from(Span::styled(line, Style::default().fg(Color::White))));
-                }
-                
-                let note_lines = notes.lines().count();
-                if note_lines > 10 {
-                    lines.push(Line::from(""));
-                    lines.push(Line::from(Span::styled(
-                        format!("... and {} more lines", note_lines - 10),
-                        Style::default().fg(Color::DarkGray),
-                    )));
                 }
             }
         }
         
-        Paragraph::new(lines)
+        // Apply scrolling
+        let scroll_offset = state.ui.details_panel_scroll;
+        let available_height = area.height.saturating_sub(2); // Account for borders
+        let total_lines = lines.len();
+        
+        // Calculate how many lines we can show
+        let max_visible_lines = available_height as usize;
+        
+        // Calculate maximum scroll position
+        let max_scroll = if total_lines > max_visible_lines {
+            total_lines - max_visible_lines
+        } else {
+            0
+        };
+        
+        // Clamp scroll position to valid range
+        let clamped_scroll = scroll_offset.min(max_scroll);
+        
+        // Determine which lines to show based on scroll position
+        let start_line = clamped_scroll;
+        let end_line = (start_line + max_visible_lines).min(total_lines);
+        
+        // Extract the visible lines
+        let visible_lines = if start_line < total_lines {
+            lines[start_line..end_line].to_vec()
+        } else {
+            vec![]
+        };
+        
+        Paragraph::new(visible_lines)
             .block(
                 Block::default()
                     .borders(Borders::ALL)
@@ -160,7 +178,46 @@ pub fn render(frame: &mut Frame, area: Rect, state: &AppState) {
             )
     };
     
+    
     frame.render_widget(content, area);
+}
+
+fn calculate_max_scroll(state: &AppState, area: Rect) -> usize {
+    if let Some(item) = state.selected_item() {
+        let available_height = area.height.saturating_sub(2); // Account for borders
+        let total_lines = if let Some(login) = &item.login {
+            let mut lines = 0;
+            lines += 2; // Name + blank
+            if login.username.is_some() { lines += 2; } else { lines += 2; }
+            if login.password.is_some() { lines += 2; } else { lines += 2; }
+            if login.totp.is_some() { lines += 2; } else { lines += 2; }
+            if let Some(uris) = &login.uris {
+                if !uris.is_empty() {
+                    lines += 1; // URIs label
+                    lines += uris.len(); // Each URI
+                    lines += 1; // Blank after URIs
+                }
+            }
+            if let Some(notes) = &item.notes {
+                if !notes.is_empty() {
+                    lines += 2; // Notes label + blank
+                    lines += notes.lines().count(); // Each note line
+                }
+            }
+            lines
+        } else {
+            0
+        };
+        
+        let max_visible_lines = available_height as usize;
+        if total_lines > max_visible_lines {
+            total_lines - max_visible_lines
+        } else {
+            0
+        }
+    } else {
+        0
+    }
 }
 
 /// Details panel click handler

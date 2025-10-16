@@ -33,10 +33,12 @@ impl AppState {
     // Convenience delegates to vault state
     pub fn load_cached_items(&mut self, items: Vec<VaultItem>) {
         self.vault.load_cached_items(items);
+        self.reset_details_scroll();
     }
 
     pub fn load_items_with_secrets(&mut self, items: Vec<VaultItem>) {
         self.vault.load_items_with_secrets(items);
+        self.reset_details_scroll();
     }
 
     pub fn selected_item(&self) -> Option<&VaultItem> {
@@ -45,47 +47,73 @@ impl AppState {
 
     pub fn select_next(&mut self) {
         self.vault.select_next();
+        self.reset_details_scroll();
     }
 
     pub fn select_previous(&mut self) {
         self.vault.select_previous();
+        self.reset_details_scroll();
     }
 
     pub fn select_index(&mut self, index: usize) {
         self.vault.select_index(index);
+        self.reset_details_scroll();
     }
 
     pub fn page_up(&mut self, page_size: usize) {
         self.vault.page_up(page_size);
+        self.reset_details_scroll();
     }
 
     pub fn page_down(&mut self, page_size: usize) {
         self.vault.page_down(page_size);
+        self.reset_details_scroll();
     }
 
     pub fn jump_to_start(&mut self) {
         self.vault.jump_to_start();
+        self.reset_details_scroll();
     }
 
     pub fn jump_to_end(&mut self) {
         self.vault.jump_to_end();
+        self.reset_details_scroll();
     }
 
     pub fn append_filter(&mut self, c: char) {
         self.vault.append_filter(c);
+        self.reset_details_scroll();
     }
 
     pub fn delete_filter_char(&mut self) {
         self.vault.delete_filter_char();
+        self.reset_details_scroll();
     }
 
     pub fn clear_filter(&mut self) {
         self.vault.clear_filter();
+        self.reset_details_scroll();
     }
 
     // Convenience delegates to UI state
     pub fn toggle_details_panel(&mut self) {
         self.ui.toggle_details_panel();
+    }
+
+    pub fn scroll_details_up(&mut self) {
+        self.ui.scroll_details_up();
+    }
+
+    pub fn scroll_details_down(&mut self) {
+        self.ui.scroll_details_down();
+    }
+
+    pub fn set_details_max_scroll(&mut self, max_scroll: usize) {
+        self.ui.set_details_max_scroll(max_scroll);
+    }
+
+    pub fn reset_details_scroll(&mut self) {
+        self.ui.reset_details_scroll();
     }
 
     pub fn enter_password_mode(&mut self) {

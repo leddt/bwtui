@@ -26,23 +26,41 @@ The details panel shows the following information for the selected entry:
    - Displays "(none)" if no TOTP is configured
    - Shows "(invalid secret)" if TOTP secret cannot be decoded
 5. **URIs**: 
-   - Lists up to 3 URIs associated with the entry
-   - Shows "... and N more" if there are more than 3
+   - Lists all URIs associated with the entry (no limit)
 6. **Notes**: 
-   - Displays up to 10 lines of notes
-   - Shows "... and N more lines" if notes exceed 10 lines
+   - Displays all lines of notes (no limit)
    - Word-wraps long lines within the panel
+
+## Scrolling
+
+The details panel is scrollable when the content exceeds the available space:
+
+- **Scroll Up**: `SHIFT+Up` or `CTRL+SHIFT+K`
+- **Scroll Down**: `SHIFT+Down` or `CTRL+SHIFT+J`
+- **Auto-scroll**: Scroll position resets when:
+  - Toggling the panel
+  - Selecting a different item (navigation, filtering, loading)
+  - Changing the selected entry in any way
+- **Bounds**: Scrolling is automatically bounded to prevent scrolling beyond content
 
 ## Implementation Details
 
 ### State Management
 - Added `details_panel_visible: bool` field to `AppState`
+- Added `details_panel_scroll: usize` field to track scroll position
+- Added `details_panel_max_scroll: usize` field to track maximum scroll position
 - Toggle method: `state.toggle_details_panel()`
+- Scroll methods: `state.scroll_details_up()` and `state.scroll_details_down()`
+- Reset method: `state.reset_details_scroll()` - resets scroll to top
 
 ### Event Handling
 - New action: `Action::ToggleDetailsPanel` - Toggles panel visibility
 - New action: `Action::SelectIndexAndShowDetails(usize)` - Selects item and opens panel if hidden
-- Key binding: `^D` (Ctrl+D) mapped to toggle action
+- New actions: `Action::ScrollDetailsUp` and `Action::ScrollDetailsDown` - Scroll the details panel
+- Key bindings: 
+  - `^D` (Ctrl+D) mapped to toggle action
+  - `SHIFT+Up/Down` mapped to scroll actions
+  - `CTRL+SHIFT+K/J` mapped to scroll actions
 - Mouse click on entry: Automatically opens panel when selecting an item
 - Mouse click on copy buttons: Triggers respective copy action (username, password, or TOTP)
 - Smart line detection: Calculates which button was clicked based on panel layout and item data

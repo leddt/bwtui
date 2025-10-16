@@ -4,6 +4,8 @@ use ratatui::layout::Rect;
 #[derive(Debug)]
 pub struct UIState {
     pub details_panel_visible: bool,
+    pub details_panel_scroll: usize, // Scroll position for details panel
+    pub details_panel_max_scroll: usize, // Maximum scroll position for details panel
     pub password_input_mode: bool,
     pub password_input: String,
     pub unlock_error: Option<String>,
@@ -18,6 +20,8 @@ impl UIState {
     pub fn new() -> Self {
         Self {
             details_panel_visible: false,
+            details_panel_scroll: 0,
+            details_panel_max_scroll: 0,
             password_input_mode: false,
             password_input: String::new(),
             unlock_error: None,
@@ -31,6 +35,32 @@ impl UIState {
 
     pub fn toggle_details_panel(&mut self) {
         self.details_panel_visible = !self.details_panel_visible;
+        // Reset scroll when toggling panel
+        self.details_panel_scroll = 0;
+    }
+
+    pub fn scroll_details_up(&mut self) {
+        if self.details_panel_scroll > 0 {
+            self.details_panel_scroll -= 1;
+        }
+    }
+
+    pub fn scroll_details_down(&mut self) {
+        if self.details_panel_scroll < self.details_panel_max_scroll {
+            self.details_panel_scroll += 1;
+        }
+    }
+
+    pub fn set_details_max_scroll(&mut self, max_scroll: usize) {
+        self.details_panel_max_scroll = max_scroll;
+        // Ensure current scroll doesn't exceed max
+        if self.details_panel_scroll > max_scroll {
+            self.details_panel_scroll = max_scroll;
+        }
+    }
+
+    pub fn reset_details_scroll(&mut self) {
+        self.details_panel_scroll = 0;
     }
 
     pub fn enter_password_mode(&mut self) {

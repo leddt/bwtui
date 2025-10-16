@@ -12,6 +12,12 @@ pub fn handle_ui(action: &Action, state: &mut AppState) -> bool {
                 state.toggle_details_panel();
             }
         }
+        Action::ScrollDetailsUp => {
+            state.scroll_details_up();
+        }
+        Action::ScrollDetailsDown => {
+            state.scroll_details_down();
+        }
         _ => {
             return false; // Not a UI action
         }

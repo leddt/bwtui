@@ -31,6 +31,10 @@ pub enum Action {
     Refresh,
     ToggleDetailsPanel,
     OpenDetailsPanel,
+    
+    // Details panel scrolling
+    ScrollDetailsUp,
+    ScrollDetailsDown,
 
     // Password input actions
     SubmitPassword,
@@ -126,13 +130,23 @@ impl EventHandler {
             // Quit
             (KeyCode::Char('q'), KeyModifiers::CONTROL) => Some(Action::Quit),
             
-            // Navigation - Arrow keys
+            // Navigation - Vim style with Ctrl+Shift (details panel scrolling)
+            (KeyCode::Char('k'), KeyModifiers::CONTROL | KeyModifiers::SHIFT) => Some(Action::ScrollDetailsUp),
+            (KeyCode::Char('j'), KeyModifiers::CONTROL | KeyModifiers::SHIFT) => Some(Action::ScrollDetailsDown),
+            
+            // Navigation - Arrow keys with Shift (details panel scrolling)
+            (KeyCode::Up, KeyModifiers::SHIFT) => Some(Action::ScrollDetailsUp),
+            (KeyCode::Down, KeyModifiers::SHIFT) => Some(Action::ScrollDetailsDown),
+            
+            // Navigation - Vim style with Ctrl only (list navigation)
+            #[allow(unreachable_patterns)]
+            (KeyCode::Char('k'), KeyModifiers::CONTROL) => Some(Action::MoveUp),
+            #[allow(unreachable_patterns)]
+            (KeyCode::Char('j'), KeyModifiers::CONTROL) => Some(Action::MoveDown),
+            
+            // Navigation - Arrow keys (list navigation)
             (KeyCode::Up, _) => Some(Action::MoveUp),
             (KeyCode::Down, _) => Some(Action::MoveDown),
-            
-            // Navigation - Vim style with Ctrl
-            (KeyCode::Char('k'), KeyModifiers::CONTROL) => Some(Action::MoveUp),
-            (KeyCode::Char('j'), KeyModifiers::CONTROL) => Some(Action::MoveDown),
             
             // Navigation - Page navigation
             (KeyCode::PageUp, _) => Some(Action::PageUp),
