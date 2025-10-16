@@ -1,4 +1,5 @@
 use crate::actions;
+use crate::actions::CopyResult;
 use crate::cache;
 use crate::cli::{self, BitwardenCli};
 use crate::clipboard::ClipboardManager;
@@ -22,6 +23,12 @@ pub enum UnlockResult {
     NotLoggedIn,
 }
 
+/// Result type for TOTP operations
+pub enum TotpResult {
+    Success(String, u64), // (code, expires_at)
+    Error(String),
+}
+
 /// Main application controller
 pub struct App {
     pub state: AppState,
@@ -33,6 +40,8 @@ pub struct App {
     cli_rx: mpsc::UnboundedReceiver<Result<BitwardenCli>>,
     unlock_tx: mpsc::UnboundedSender<UnlockResult>,
     unlock_rx: mpsc::UnboundedReceiver<UnlockResult>,
+    totp_tx: mpsc::UnboundedSender<TotpResult>,
+    totp_rx: mpsc::UnboundedReceiver<TotpResult>,
     session_token_to_save: Option<String>,
 }
 
@@ -51,6 +60,7 @@ impl App {
         let (sync_tx, sync_rx) = mpsc::unbounded_channel::<SyncResult>();
         let (cli_tx, cli_rx) = mpsc::unbounded_channel::<Result<BitwardenCli>>();
         let (unlock_tx, unlock_rx) = mpsc::unbounded_channel::<UnlockResult>();
+        let (totp_tx, totp_rx) = mpsc::unbounded_channel::<TotpResult>();
 
         Self {
             state,
@@ -62,6 +72,8 @@ impl App {
             cli_rx,
             unlock_tx,
             unlock_rx,
+            totp_tx,
+            totp_rx,
             session_token_to_save: None,
         }
     }
@@ -165,6 +177,11 @@ impl App {
         if let Ok(result) = self.sync_rx.try_recv() {
             self.handle_sync_result(result);
         }
+
+        // Check for TOTP results
+        if let Ok(result) = self.totp_rx.try_recv() {
+            self.handle_totp_result(result);
+        }
     }
 
     /// Handle unlock result from background task
@@ -193,6 +210,53 @@ impl App {
                 // Vault is not logged in - show error popup
                 self.state.stop_sync();
                 self.state.show_not_logged_in_popup();
+            }
+        }
+    }
+
+    /// Handle TOTP result from background task
+    fn handle_totp_result(&mut self, result: TotpResult) {
+        self.state.set_totp_loading(false);
+        match result {
+            TotpResult::Success(code, expires_at) => {
+                // Get the current item ID to associate the TOTP code with it
+                let item_id = self.state.selected_item()
+                    .map(|item| item.id.clone())
+                    .unwrap_or_default();
+                
+                // Check if we were copying TOTP before setting the code (which clears the flag)
+                let was_copying = self.state.ui.totp_copy_pending;
+                
+                self.state.set_totp_code(code.clone(), expires_at, item_id);
+                
+                // If we were copying TOTP, copy it now
+                if was_copying {
+                    if let Some(cb) = self.clipboard.as_mut() {
+                        match cb.copy(&code) {
+                            Ok(_) => {
+                                self.state.set_status(
+                                    format!("✓ TOTP code copied: {}", code),
+                                    MessageLevel::Success,
+                                );
+                            }
+                            Err(_) => {
+                                self.state.set_status(
+                                    "✗ Failed to copy to clipboard",
+                                    MessageLevel::Error,
+                                );
+                            }
+                        }
+                    } else {
+                        self.state.set_status("✗ Clipboard not available", MessageLevel::Error);
+                    }
+                }
+                // No message when just loading for display purposes
+            }
+            TotpResult::Error(error) => {
+                self.state.set_status(
+                    format!("✗ Failed to fetch TOTP: {}", error),
+                    MessageLevel::Error,
+                );
             }
         }
     }
@@ -287,6 +351,62 @@ impl App {
         }
     }
 
+    /// Fetch TOTP code for the currently selected item
+    pub fn fetch_totp_code(&mut self) {
+        if !self.state.secrets_available() {
+            self.state.set_status(
+                "⏳ Please wait, loading vault secrets...",
+                MessageLevel::Warning,
+            );
+            return;
+        }
+
+        if let Some(item) = self.state.selected_item() {
+            if let Some(login) = &item.login {
+                if login.totp.is_some() {
+                    if let Some(ref cli) = self.bw_cli {
+                        let item_id = item.id.clone();
+                        self.state.set_totp_loading(true);
+                        // Record the timestamp when we start fetching
+                        let now = std::time::SystemTime::now()
+                            .duration_since(std::time::UNIX_EPOCH)
+                            .unwrap_or_default()
+                            .as_secs();
+                        self.state.set_last_totp_fetch(now);
+                        let cli_clone = cli.clone();
+                        let totp_tx_clone = self.totp_tx.clone();
+                        
+                        tokio::spawn(async move {
+                            let result = match cli_clone.get_totp(&item_id).await {
+                                Ok(code) => {
+                                    // Calculate expiration time (TOTP codes are valid for 30 seconds)
+                                    let now = std::time::SystemTime::now()
+                                        .duration_since(std::time::UNIX_EPOCH)
+                                        .unwrap_or_default()
+                                        .as_secs();
+                                    let expires_at = ((now / 30) + 1) * 30; // Next 30-second boundary
+                                    TotpResult::Success(code, expires_at)
+                                }
+                                Err(e) => TotpResult::Error(e.to_string()),
+                            };
+                            let _ = totp_tx_clone.send(result);
+                        });
+                    } else {
+                        self.state.set_status(
+                            "✗ Bitwarden CLI not available",
+                            MessageLevel::Error,
+                        );
+                    }
+                } else {
+                    self.state.set_status(
+                        "✗ No TOTP configured for this entry",
+                        MessageLevel::Warning,
+                    );
+                }
+            }
+        }
+    }
+
     /// Trigger a vault refresh/sync
     pub fn refresh_vault(&mut self) {
         // Don't start a new sync if one is already in progress
@@ -326,6 +446,26 @@ impl App {
 
         // Handle tick action (periodic UI updates)
         if matches!(action, Action::Tick) {
+            // Check if we need to refresh TOTP code
+            if self.state.details_panel_visible() {
+                if let Some(item) = self.state.selected_item() {
+                    if let Some(login) = &item.login {
+                        if login.totp.is_some() {
+                            // Only fetch TOTP if we're not already loading one and enough time has passed
+                            if !self.state.totp_loading() && self.state.can_fetch_totp() {
+                                // If we have a TOTP code but it's expired, refresh it
+                                if self.state.current_totp_code().is_some() && self.state.is_totp_expired() {
+                                    self.fetch_totp_code();
+                                }
+                                // If we don't have a TOTP code yet, fetch it
+                                else if self.state.current_totp_code().is_none() {
+                                    self.fetch_totp_code();
+                                }
+                            }
+                        }
+                    }
+                }
+            }
             return true;
         }
 
@@ -352,7 +492,23 @@ impl App {
             return true;
         }
 
-        if actions::handle_copy(&action, &mut self.state, self.clipboard.as_mut()) {
+        match actions::handle_copy(&action, &mut self.state, self.clipboard.as_mut(), self.bw_cli.as_ref()) {
+            CopyResult::Handled => {
+                return true;
+            }
+            CopyResult::NeedTotpFetch => {
+                // Trigger TOTP fetch for copy operation
+                self.fetch_totp_code();
+                return true;
+            }
+            CopyResult::NotHandled => {
+                // Continue to other action handlers
+            }
+        }
+
+        // Handle TOTP fetching
+        if matches!(action, Action::FetchTotp) {
+            self.fetch_totp_code();
             return true;
         }
 

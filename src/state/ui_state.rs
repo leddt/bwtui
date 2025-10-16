@@ -1,5 +1,7 @@
 use ratatui::layout::Rect;
 
+use std::time::{SystemTime, UNIX_EPOCH};
+
 /// State related to UI modes, dialogs, and layout
 #[derive(Debug)]
 pub struct UIState {
@@ -14,6 +16,13 @@ pub struct UIState {
     pub show_not_logged_in_error: bool,
     pub list_area: Rect,
     pub details_panel_area: Rect,
+    // TOTP state
+    pub current_totp_code: Option<String>,
+    pub totp_expires_at: Option<u64>, // Unix timestamp when current TOTP expires
+    pub totp_loading: bool, // Whether we're currently fetching a TOTP code
+    pub totp_copy_pending: bool, // Whether we're waiting to copy TOTP after fetch
+    pub last_totp_fetch: Option<u64>, // Unix timestamp of last TOTP fetch attempt
+    pub totp_item_id: Option<String>, // ID of the item that the current TOTP code belongs to
 }
 
 impl UIState {
@@ -30,6 +39,12 @@ impl UIState {
             show_not_logged_in_error: false,
             list_area: Rect::default(),
             details_panel_area: Rect::default(),
+            current_totp_code: None,
+            totp_expires_at: None,
+            totp_loading: false,
+            totp_copy_pending: false,
+            last_totp_fetch: None,
+            totp_item_id: None,
         }
     }
 
@@ -107,6 +122,87 @@ impl UIState {
 
     pub fn show_not_logged_in_popup(&mut self) {
         self.show_not_logged_in_error = true;
+    }
+
+    /// Set the current TOTP code and its expiration time
+    pub fn set_totp_code(&mut self, code: String, expires_at: u64, item_id: String) {
+        self.current_totp_code = Some(code);
+        self.totp_expires_at = Some(expires_at);
+        self.totp_item_id = Some(item_id);
+        self.totp_loading = false;
+        self.totp_copy_pending = false;
+    }
+
+    /// Clear the current TOTP code
+    pub fn clear_totp_code(&mut self) {
+        self.current_totp_code = None;
+        self.totp_expires_at = None;
+        self.totp_item_id = None;
+        self.totp_loading = false;
+        self.totp_copy_pending = false;
+    }
+
+    /// Set TOTP loading state
+    pub fn set_totp_loading(&mut self, loading: bool) {
+        self.totp_loading = loading;
+    }
+
+    /// Set TOTP copy pending state
+    pub fn set_totp_copy_pending(&mut self, pending: bool) {
+        self.totp_copy_pending = pending;
+    }
+
+    /// Set last TOTP fetch timestamp
+    pub fn set_last_totp_fetch(&mut self, timestamp: u64) {
+        self.last_totp_fetch = Some(timestamp);
+    }
+
+    /// Check if enough time has passed since last TOTP fetch (minimum 1 second)
+    pub fn can_fetch_totp(&self) -> bool {
+        if let Some(last_fetch) = self.last_totp_fetch {
+            let now = SystemTime::now()
+                .duration_since(UNIX_EPOCH)
+                .unwrap_or_default()
+                .as_secs();
+            now - last_fetch >= 1 // Minimum 1 second between fetches
+        } else {
+            true // Never fetched before
+        }
+    }
+
+    /// Check if the current TOTP code belongs to the given item
+    pub fn totp_belongs_to_item(&self, item_id: &str) -> bool {
+        self.totp_item_id.as_ref().map_or(false, |id| id == item_id)
+    }
+
+    /// Check if the current TOTP code is expired
+    pub fn is_totp_expired(&self) -> bool {
+        if let Some(expires_at) = self.totp_expires_at {
+            let now = SystemTime::now()
+                .duration_since(UNIX_EPOCH)
+                .unwrap_or_default()
+                .as_secs();
+            now >= expires_at
+        } else {
+            true // No TOTP code means it's "expired"
+        }
+    }
+
+    /// Get remaining seconds for current TOTP code
+    pub fn totp_remaining_seconds(&self) -> Option<u64> {
+        if let Some(expires_at) = self.totp_expires_at {
+            let now = SystemTime::now()
+                .duration_since(UNIX_EPOCH)
+                .unwrap_or_default()
+                .as_secs();
+            if now < expires_at {
+                Some(expires_at - now)
+            } else {
+                Some(0)
+            }
+        } else {
+            None
+        }
     }
 }
 

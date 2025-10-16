@@ -28,6 +28,7 @@ pub enum Action {
     CopyUsername,
     CopyPassword,
     CopyTotp,
+    FetchTotp,
     Refresh,
     ToggleDetailsPanel,
     OpenDetailsPanel,

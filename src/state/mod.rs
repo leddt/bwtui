@@ -48,16 +48,19 @@ impl AppState {
     pub fn select_next(&mut self) {
         self.vault.select_next();
         self.reset_details_scroll();
+        self.clear_totp_code(); // Clear TOTP when switching items
     }
 
     pub fn select_previous(&mut self) {
         self.vault.select_previous();
         self.reset_details_scroll();
+        self.clear_totp_code(); // Clear TOTP when switching items
     }
 
     pub fn select_index(&mut self, index: usize) {
         self.vault.select_index(index);
         self.reset_details_scroll();
+        self.clear_totp_code(); // Clear TOTP when switching items
     }
 
     pub fn page_up(&mut self, page_size: usize) {
@@ -81,17 +84,41 @@ impl AppState {
     }
 
     pub fn append_filter(&mut self, c: char) {
+        let old_selection = self.vault.selected_item().map(|item| item.id.clone());
         self.vault.append_filter(c);
+        let new_selection = self.vault.selected_item().map(|item| item.id.clone());
+        
+        // Clear TOTP if selection changed
+        if old_selection != new_selection {
+            self.clear_totp_code();
+        }
+        
         self.reset_details_scroll();
     }
 
     pub fn delete_filter_char(&mut self) {
+        let old_selection = self.vault.selected_item().map(|item| item.id.clone());
         self.vault.delete_filter_char();
+        let new_selection = self.vault.selected_item().map(|item| item.id.clone());
+        
+        // Clear TOTP if selection changed
+        if old_selection != new_selection {
+            self.clear_totp_code();
+        }
+        
         self.reset_details_scroll();
     }
 
     pub fn clear_filter(&mut self) {
+        let old_selection = self.vault.selected_item().map(|item| item.id.clone());
         self.vault.clear_filter();
+        let new_selection = self.vault.selected_item().map(|item| item.id.clone());
+        
+        // Clear TOTP if selection changed
+        if old_selection != new_selection {
+            self.clear_totp_code();
+        }
+        
         self.reset_details_scroll();
     }
 
@@ -225,6 +252,51 @@ impl AppState {
     #[inline]
     pub fn initial_load_complete(&self) -> bool {
         self.vault.initial_load_complete
+    }
+
+    // TOTP management
+    pub fn set_totp_code(&mut self, code: String, expires_at: u64, item_id: String) {
+        self.ui.set_totp_code(code, expires_at, item_id);
+    }
+
+    pub fn clear_totp_code(&mut self) {
+        self.ui.clear_totp_code();
+    }
+
+    pub fn set_totp_loading(&mut self, loading: bool) {
+        self.ui.set_totp_loading(loading);
+    }
+
+    pub fn set_totp_copy_pending(&mut self, pending: bool) {
+        self.ui.set_totp_copy_pending(pending);
+    }
+
+    pub fn set_last_totp_fetch(&mut self, timestamp: u64) {
+        self.ui.set_last_totp_fetch(timestamp);
+    }
+
+    pub fn can_fetch_totp(&self) -> bool {
+        self.ui.can_fetch_totp()
+    }
+
+    pub fn totp_belongs_to_item(&self, item_id: &str) -> bool {
+        self.ui.totp_belongs_to_item(item_id)
+    }
+
+    pub fn is_totp_expired(&self) -> bool {
+        self.ui.is_totp_expired()
+    }
+
+    pub fn totp_remaining_seconds(&self) -> Option<u64> {
+        self.ui.totp_remaining_seconds()
+    }
+
+    pub fn current_totp_code(&self) -> Option<&String> {
+        self.ui.current_totp_code.as_ref()
+    }
+
+    pub fn totp_loading(&self) -> bool {
+        self.ui.totp_loading
     }
 }
 

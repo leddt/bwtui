@@ -188,6 +188,49 @@ impl BitwardenCli {
         Ok(session_token)
     }
 
+    /// Get TOTP code for a specific item ID
+    pub async fn get_totp(&self, item_id: &str) -> Result<String> {
+        let mut cmd = Command::new("bw");
+        cmd.arg("get")
+            .arg("totp")
+            .arg(item_id);
+
+        if let Some(token) = &self.session_token {
+            cmd.env("BW_SESSION", token);
+        }
+
+        let output = cmd
+            .output()
+            .await
+            .map_err(|e| BwError::CommandFailed(format!("Failed to execute bw get totp: {}", e)))?;
+
+        if !output.status.success() {
+            let stderr = String::from_utf8_lossy(&output.stderr);
+            
+            // Check for common error messages
+            if stderr.contains("not logged in") {
+                return Err(BwError::NotLoggedIn);
+            } else if stderr.contains("locked") {
+                return Err(BwError::VaultLocked);
+            }
+            
+            return Err(BwError::CommandFailed(format!(
+                "bw get totp failed: {}",
+                stderr
+            )));
+        }
+
+        let totp_code = String::from_utf8_lossy(&output.stdout).trim().to_string();
+        
+        if totp_code.is_empty() {
+            return Err(BwError::CommandFailed(
+                "TOTP code is empty".to_string()
+            ));
+        }
+
+        Ok(totp_code)
+    }
+
     /// Create a new instance with a specific session token
     pub fn with_session_token(token: String) -> Self {
         Self {

@@ -1,29 +1,38 @@
 use crate::clipboard::ClipboardManager;
 use crate::events::Action;
 use crate::state::{AppState, MessageLevel};
-use crate::totp_util;
+use crate::cli::BitwardenCli;
+
+/// Result of copy action handling
+pub enum CopyResult {
+    Handled,
+    NeedTotpFetch,
+    NotHandled,
+}
 
 /// Handle copy actions (username, password, TOTP)
 pub fn handle_copy(
     action: &Action,
     state: &mut AppState,
     clipboard: Option<&mut ClipboardManager>,
-) -> bool {
+    cli: Option<&BitwardenCli>,
+) -> CopyResult {
     match action {
         Action::CopyUsername => {
             copy_username(state, clipboard);
+            CopyResult::Handled
         }
         Action::CopyPassword => {
             copy_password(state, clipboard);
+            CopyResult::Handled
         }
         Action::CopyTotp => {
-            copy_totp(state, clipboard);
+            copy_totp(state, clipboard, cli)
         }
         _ => {
-            return false; // Not a copy action
+            CopyResult::NotHandled // Not a copy action
         }
     }
-    true
 }
 
 fn copy_username(state: &mut AppState, clipboard: Option<&mut ClipboardManager>) {
@@ -90,23 +99,24 @@ fn copy_password(state: &mut AppState, clipboard: Option<&mut ClipboardManager>)
     }
 }
 
-fn copy_totp(state: &mut AppState, clipboard: Option<&mut ClipboardManager>) {
+fn copy_totp(state: &mut AppState, clipboard: Option<&mut ClipboardManager>, cli: Option<&BitwardenCli>) -> CopyResult {
     if !state.secrets_available() {
         state.set_status(
             "⏳ Please wait, loading vault secrets...",
             MessageLevel::Warning,
         );
-        return;
+        return CopyResult::Handled;
     }
 
     if let Some(item) = state.selected_item() {
         if let Some(login) = &item.login {
-            if let Some(totp_secret) = &login.totp {
-                // Generate TOTP locally (much faster than CLI)
-                match totp_util::generate_totp(totp_secret) {
-                    Ok((code, _remaining)) => {
+            if login.totp.is_some() {
+                // First, try to use the current TOTP code if it's available and not expired
+                if let Some(code) = state.current_totp_code() {
+                    if !state.is_totp_expired() && state.totp_belongs_to_item(&item.id) {
+                        // Use the existing code
                         if let Some(cb) = clipboard {
-                            match cb.copy(&code) {
+                            match cb.copy(code) {
                                 Ok(_) => {
                                     state.set_status(
                                         format!("✓ TOTP code copied: {}", code),
@@ -123,21 +133,37 @@ fn copy_totp(state: &mut AppState, clipboard: Option<&mut ClipboardManager>) {
                         } else {
                             state.set_status("✗ Clipboard not available", MessageLevel::Error);
                         }
+                        return CopyResult::Handled;
                     }
-                    Err(e) => {
-                        state.set_status(
-                            format!("✗ Failed to generate TOTP: {}", e),
-                            MessageLevel::Error,
-                        );
-                    }
+                }
+
+                // If we don't have a valid TOTP code, fetch it from CLI
+                if let Some(_cli) = cli {
+                    state.set_status(
+                        "⏳ Fetching TOTP code...",
+                        MessageLevel::Info,
+                    );
+                    
+                    // Set loading state and copy pending - the actual fetching will be handled by the main loop
+                    state.set_totp_loading(true);
+                    state.set_totp_copy_pending(true);
+                    return CopyResult::NeedTotpFetch;
+                } else {
+                    state.set_status(
+                        "✗ Bitwarden CLI not available",
+                        MessageLevel::Error,
+                    );
+                    return CopyResult::Handled;
                 }
             } else {
                 state.set_status(
                     "✗ No TOTP configured for this entry",
                     MessageLevel::Warning,
                 );
+                return CopyResult::Handled;
             }
         }
     }
+    CopyResult::Handled
 }
 

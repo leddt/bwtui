@@ -8,7 +8,6 @@ mod events;
 mod session;
 mod state;
 mod terminal;
-mod totp_util;
 mod types;
 mod ui;
 

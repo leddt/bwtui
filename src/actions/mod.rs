@@ -4,7 +4,7 @@ mod filter;
 mod ui;
 
 pub use navigation::handle_navigation;
-pub use copy::handle_copy;
+pub use copy::{handle_copy, CopyResult};
 pub use filter::handle_filter;
 pub use ui::handle_ui;
 

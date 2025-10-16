@@ -1,5 +1,4 @@
 use crate::state::AppState;
-use crate::totp_util;
 use crate::ui::widgets::clickable::{Clickable, is_click_in_area};
 use crossterm::event::MouseEvent;
 use ratatui::{
@@ -71,22 +70,33 @@ pub fn render(frame: &mut Frame, area: Rect, state: &mut AppState) {
                     Span::styled("TOTP: ", Style::default().fg(Color::Cyan).add_modifier(Modifier::BOLD)),
                     Span::styled(format!("{} Loading...", state.sync_spinner()), Style::default().fg(Color::Yellow)),
                 ]));
-            } else if let Some(totp_secret) = &login.totp {
-                match totp_util::generate_totp(totp_secret) {
-                    Ok((code, remaining)) => {
+            } else if let Some(_totp_secret) = &login.totp {
+                if state.totp_loading() {
+                    // Show loading spinner when fetching TOTP from CLI
+                    lines.push(Line::from(vec![
+                        Span::styled("TOTP: ", Style::default().fg(Color::Cyan).add_modifier(Modifier::BOLD)),
+                        Span::styled(format!("{} Loading...", state.sync_spinner()), Style::default().fg(Color::Yellow)),
+                    ]));
+                } else if let Some(code) = state.current_totp_code() {
+                    if let Some(remaining) = state.totp_remaining_seconds() {
                         lines.push(Line::from(vec![
                             Span::styled("TOTP: ", Style::default().fg(Color::Cyan).add_modifier(Modifier::BOLD)),
-                            Span::styled(code, Style::default().fg(Color::Green).add_modifier(Modifier::BOLD)),
+                            Span::styled(code.clone(), Style::default().fg(Color::Green).add_modifier(Modifier::BOLD)),
                             Span::styled(format!(" ({}s)", remaining), Style::default().fg(Color::DarkGray)),
                             Span::styled(" [^T]", Style::default().fg(Color::DarkGray)),
                         ]));
-                    }
-                    Err(_) => {
+                    } else {
                         lines.push(Line::from(vec![
                             Span::styled("TOTP: ", Style::default().fg(Color::Cyan).add_modifier(Modifier::BOLD)),
-                            Span::styled("(invalid secret)", Style::default().fg(Color::Red)),
+                            Span::styled(code.clone(), Style::default().fg(Color::Green).add_modifier(Modifier::BOLD)),
+                            Span::styled(" [^T]", Style::default().fg(Color::DarkGray)),
                         ]));
                     }
+                } else {
+                    lines.push(Line::from(vec![
+                        Span::styled("TOTP: ", Style::default().fg(Color::Cyan).add_modifier(Modifier::BOLD)),
+                        Span::styled("(click to load)", Style::default().fg(Color::DarkGray)),
+                    ]));
                 }
             } else {
                 lines.push(Line::from(vec![
@@ -297,13 +307,19 @@ impl Clickable for DetailsClickHandler {
         // TOTP section
         if login.totp.is_some() {
             if content_line == current_line {
-                // Calculate approximate position of [^T] at end of line
-                // "TOTP: " (6) + "123456" (6) + " (Xs)" (5) + " [" (2) + "^T" (2) + "]" (1) = 22
-                let shortcut_start = 19; // After "TOTP: 123456 (Xs) ["
-                let shortcut_end = shortcut_start + 3; // "[^T]" is 4 characters
-                
-                if relative_x >= shortcut_start && relative_x <= shortcut_end {
-                    return Some(crate::events::Action::CopyTotp);
+                // Check if we have a TOTP code displayed
+                if state.current_totp_code().is_some() {
+                    // Calculate approximate position of [^T] at end of line
+                    // "TOTP: " (6) + "123456" (6) + " (Xs)" (5) + " [" (2) + "^T" (2) + "]" (1) = 22
+                    let shortcut_start = 19; // After "TOTP: 123456 (Xs) ["
+                    let shortcut_end = shortcut_start + 3; // "[^T]" is 4 characters
+                    
+                    if relative_x >= shortcut_start && relative_x <= shortcut_end {
+                        return Some(crate::events::Action::CopyTotp);
+                    }
+                } else {
+                    // No TOTP code displayed, clicking anywhere on the line should fetch it
+                    return Some(crate::events::Action::FetchTotp);
                 }
             }
         }
