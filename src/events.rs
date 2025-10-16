@@ -45,6 +45,9 @@ pub enum Action {
     // Save token actions
     SaveTokenYes,
     SaveTokenNo,
+    
+    // Details panel actions
+    CloseDetailsPanel,
 }
 
 pub struct EventHandler;
@@ -127,6 +130,15 @@ impl EventHandler {
 
         // Normal mode
         match (key.code, key.modifiers) {
+            // Escape key - close details panel if open, otherwise quit
+            (KeyCode::Esc, _) => {
+                if state.details_panel_visible() {
+                    Some(Action::CloseDetailsPanel)
+                } else {
+                    Some(Action::Quit)
+                }
+            }
+            
             // Quit
             (KeyCode::Char('q'), KeyModifiers::CONTROL) => Some(Action::Quit),
             
