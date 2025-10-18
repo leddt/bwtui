@@ -7,7 +7,7 @@ use crate::ui::widgets::{details::DetailsClickHandler, entry_list::EntryListClic
 pub enum Action {
     Quit,
     Tick, // Periodic update for TOTP countdown and other time-based updates
-    
+
     // Navigation
     MoveUp,
     MoveDown,
@@ -18,12 +18,12 @@ pub enum Action {
     #[allow(dead_code)]
     SelectIndex(usize),
     SelectIndexAndShowDetails(usize),
-    
+
     // Filter
     AppendFilter(char),
     DeleteFilterChar,
     ClearFilter,
-    
+
     // Actions
     CopyUsername,
     CopyPassword,
@@ -32,7 +32,7 @@ pub enum Action {
     Refresh,
     ToggleDetailsPanel,
     OpenDetailsPanel,
-    
+
     // Details panel scrolling
     ScrollDetailsUp,
     ScrollDetailsDown,
@@ -46,7 +46,7 @@ pub enum Action {
     // Save token actions
     SaveTokenYes,
     SaveTokenNo,
-    
+
     // Details panel actions
     CloseDetailsPanel,
 }
@@ -139,53 +139,53 @@ impl EventHandler {
                     Some(Action::Quit)
                 }
             }
-            
+
             // Quit
             (KeyCode::Char('q'), KeyModifiers::CONTROL) => Some(Action::Quit),
-            
+
             // Navigation - Vim style with Ctrl+Shift (details panel scrolling)
-            (KeyCode::Char('k'), KeyModifiers::CONTROL | KeyModifiers::SHIFT) => Some(Action::ScrollDetailsUp),
-            (KeyCode::Char('j'), KeyModifiers::CONTROL | KeyModifiers::SHIFT) => Some(Action::ScrollDetailsDown),
-            
+            (KeyCode::Char('K'), _) if key.modifiers.contains(KeyModifiers::CONTROL) => Some(Action::ScrollDetailsUp),
+            (KeyCode::Char('J'), _) if key.modifiers.contains(KeyModifiers::CONTROL) => Some(Action::ScrollDetailsDown),
+
             // Navigation - Arrow keys with Shift (details panel scrolling)
             (KeyCode::Up, KeyModifiers::SHIFT) => Some(Action::ScrollDetailsUp),
             (KeyCode::Down, KeyModifiers::SHIFT) => Some(Action::ScrollDetailsDown),
-            
+
             // Navigation - Vim style with Ctrl only (list navigation)
             #[allow(unreachable_patterns)]
             (KeyCode::Char('k'), KeyModifiers::CONTROL) => Some(Action::MoveUp),
             #[allow(unreachable_patterns)]
             (KeyCode::Char('j'), KeyModifiers::CONTROL) => Some(Action::MoveDown),
-            
+
             // Navigation - Arrow keys (list navigation)
             (KeyCode::Up, _) => Some(Action::MoveUp),
             (KeyCode::Down, _) => Some(Action::MoveDown),
-            
+
             // Navigation - Page navigation
             (KeyCode::PageUp, _) => Some(Action::PageUp),
             (KeyCode::PageDown, _) => Some(Action::PageDown),
             (KeyCode::Home, _) => Some(Action::Home),
             (KeyCode::End, _) => Some(Action::End),
-            
+
             // Filter editing
             (KeyCode::Backspace, _) => Some(Action::DeleteFilterChar),
             (KeyCode::Char('x'), KeyModifiers::CONTROL) => Some(Action::ClearFilter),
-            
+
             // Open details panel (doesn't close if already open)
             (KeyCode::Enter, _) => Some(Action::OpenDetailsPanel),
-            
+
             // Actions with Ctrl modifier
             (KeyCode::Char('u'), KeyModifiers::CONTROL) => Some(Action::CopyUsername),
             (KeyCode::Char('p'), KeyModifiers::CONTROL) => Some(Action::CopyPassword),
             (KeyCode::Char('t'), KeyModifiers::CONTROL) => Some(Action::CopyTotp),
             (KeyCode::Char('r'), KeyModifiers::CONTROL) => Some(Action::Refresh),
             (KeyCode::Char('d'), KeyModifiers::CONTROL) => Some(Action::ToggleDetailsPanel),
-            
+
             // Any other printable character updates the filter
             (KeyCode::Char(c), KeyModifiers::NONE) | (KeyCode::Char(c), KeyModifiers::SHIFT) => {
                 Some(Action::AppendFilter(c))
             }
-            
+
             _ => None,
         }
     }
@@ -201,13 +201,13 @@ impl EventHandler {
                         return Some(action);
                     }
                 }
-                
+
                 // Try entry list
                 let list_handler = EntryListClickHandler;
                 if let Some(action) = list_handler.handle_click(mouse, state, state.ui.list_area) {
                     return Some(action);
                 }
-                
+
                 None
             }
             MouseEventKind::ScrollUp => {
@@ -240,4 +240,3 @@ mod tests {
         assert!(true);
     }
 }
-
