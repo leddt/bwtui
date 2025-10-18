@@ -307,6 +307,26 @@ impl AppState {
         self.reset_details_scroll();
         self.clear_totp_code(); // Clear TOTP when switching tabs
     }
+
+    /// Cycle to the next tab and apply the filter
+    pub fn cycle_next_tab(&mut self) {
+        self.ui.cycle_next_tab();
+        let new_filter = self.ui.get_active_filter();
+        // Reapply filter with new type filter
+        self.vault.apply_filter(new_filter);
+        self.reset_details_scroll();
+        self.clear_totp_code(); // Clear TOTP when switching tabs
+    }
+
+    /// Cycle to the previous tab and apply the filter
+    pub fn cycle_previous_tab(&mut self) {
+        self.ui.cycle_previous_tab();
+        let new_filter = self.ui.get_active_filter();
+        // Reapply filter with new type filter
+        self.vault.apply_filter(new_filter);
+        self.reset_details_scroll();
+        self.clear_totp_code(); // Clear TOTP when switching tabs
+    }
 }
 
 impl Default for AppState {

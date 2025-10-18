@@ -54,6 +54,9 @@ pub enum Action {
 
     // Tab switching
     SelectItemTypeTab(Option<crate::types::ItemType>),
+    SelectTabByIndex(usize),
+    CycleNextTab,
+    CyclePreviousTab,
 }
 
 pub struct EventHandler;
@@ -188,12 +191,31 @@ impl EventHandler {
             (KeyCode::Char('r'), KeyModifiers::CONTROL) => Some(Action::Refresh),
             (KeyCode::Char('d'), KeyModifiers::CONTROL) => Some(Action::ToggleDetailsPanel),
 
-            // Tab switching with number keys
-        (KeyCode::Char('1'), KeyModifiers::CONTROL) => Some(Action::SelectItemTypeTab(None)), // All types
-        (KeyCode::Char('2'), KeyModifiers::CONTROL) => Some(Action::SelectItemTypeTab(Some(crate::types::ItemType::Login))),
-        (KeyCode::Char('3'), KeyModifiers::CONTROL) => Some(Action::SelectItemTypeTab(Some(crate::types::ItemType::SecureNote))),
-        (KeyCode::Char('4'), KeyModifiers::CONTROL) => Some(Action::SelectItemTypeTab(Some(crate::types::ItemType::Card))),
-        (KeyCode::Char('5'), KeyModifiers::CONTROL) => Some(Action::SelectItemTypeTab(Some(crate::types::ItemType::Identity))),
+            // Tab switching with number keys (Ctrl+number for old behavior, number alone for new)
+            (KeyCode::Char('1'), KeyModifiers::CONTROL) => Some(Action::SelectItemTypeTab(None)), // All types
+            (KeyCode::Char('2'), KeyModifiers::CONTROL) => Some(Action::SelectItemTypeTab(Some(crate::types::ItemType::Login))),
+            (KeyCode::Char('3'), KeyModifiers::CONTROL) => Some(Action::SelectItemTypeTab(Some(crate::types::ItemType::SecureNote))),
+            (KeyCode::Char('4'), KeyModifiers::CONTROL) => Some(Action::SelectItemTypeTab(Some(crate::types::ItemType::Card))),
+            (KeyCode::Char('5'), KeyModifiers::CONTROL) => Some(Action::SelectItemTypeTab(Some(crate::types::ItemType::Identity))),
+
+            // Tab switching with number keys (direct selection)
+            (KeyCode::Char('1'), KeyModifiers::NONE) => Some(Action::SelectTabByIndex(0)), // All types
+            (KeyCode::Char('2'), KeyModifiers::NONE) => Some(Action::SelectTabByIndex(1)), // Login
+            (KeyCode::Char('3'), KeyModifiers::NONE) => Some(Action::SelectTabByIndex(2)), // SecureNote
+            (KeyCode::Char('4'), KeyModifiers::NONE) => Some(Action::SelectTabByIndex(3)), // Card
+            (KeyCode::Char('5'), KeyModifiers::NONE) => Some(Action::SelectTabByIndex(4)), // Identity
+
+            // Tab cycling with Tab key
+            (KeyCode::Tab, KeyModifiers::SHIFT) => Some(Action::CyclePreviousTab),
+            (KeyCode::Tab, _) => Some(Action::CycleNextTab),
+
+            // Tab cycling with Left/Right arrow keys
+            (KeyCode::Left, _) => Some(Action::CyclePreviousTab),
+            (KeyCode::Right, _) => Some(Action::CycleNextTab),
+
+            // Tab cycling with Ctrl+H/L (Vim-style)
+            (KeyCode::Char('h'), KeyModifiers::CONTROL) => Some(Action::CyclePreviousTab),
+            (KeyCode::Char('l'), KeyModifiers::CONTROL) => Some(Action::CycleNextTab),
 
             // Any other printable character updates the filter
             (KeyCode::Char(c), KeyModifiers::NONE) | (KeyCode::Char(c), KeyModifiers::SHIFT) => {

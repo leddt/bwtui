@@ -2,112 +2,95 @@ use crate::state::AppState;
 use crate::types::ItemType;
 use ratatui::{
     layout::Rect,
-    style::{Color, Modifier, Style},
-    text::{Line, Span},
-    widgets::{Block, Borders, Paragraph},
+    style::{Color, Style, Stylize},
+    text::Line,
+    widgets::{Block, Borders, Tabs},
     Frame,
 };
+use strum::{Display, EnumIter, FromRepr, IntoEnumIterator};
+
+#[derive(Default, Clone, Copy, Display, FromRepr, EnumIter, PartialEq, Eq)]
+enum TabType {
+    #[default]
+    #[strum(to_string = "^1 All")]
+    All,
+    #[strum(to_string = "^2 Logins")]
+    Login,
+    #[strum(to_string = "^3 Notes")]
+    SecureNote,
+    #[strum(to_string = "^4 Cards")]
+    Card,
+    #[strum(to_string = "^5 Identities")]
+    Identity,
+}
+
+impl TabType {
+    fn from_item_type(item_type: Option<ItemType>) -> Self {
+        match item_type {
+            None => TabType::All,
+            Some(ItemType::Login) => TabType::Login,
+            Some(ItemType::SecureNote) => TabType::SecureNote,
+            Some(ItemType::Card) => TabType::Card,
+            Some(ItemType::Identity) => TabType::Identity,
+        }
+    }
+
+    fn get_count(&self, state: &AppState) -> usize {
+        match self {
+            TabType::All => state.vault.vault_items.len(),
+            TabType::Login => state.vault.vault_items.iter()
+                .filter(|item| item.item_type == ItemType::Login)
+                .count(),
+            TabType::SecureNote => state.vault.vault_items.iter()
+                .filter(|item| item.item_type == ItemType::SecureNote)
+                .count(),
+            TabType::Card => state.vault.vault_items.iter()
+                .filter(|item| item.item_type == ItemType::Card)
+                .count(),
+            TabType::Identity => state.vault.vault_items.iter()
+                .filter(|item| item.item_type == ItemType::Identity)
+                .count(),
+        }
+    }
+
+    fn title(&self, state: &AppState) -> Line<'static> {
+        let count = self.get_count(state);
+        format!("{} ({})", self, count)
+            .fg(Color::White)
+            .into()
+    }
+
+    fn highlight_style(&self) -> Style {
+        Style::default()
+            .fg(Color::Black)
+            .bg(Color::Cyan)
+    }
+}
 
 pub fn render(frame: &mut Frame, area: Rect, state: &mut AppState) {
     let active_filter = state.ui.get_active_filter();
+    let current_tab = TabType::from_item_type(active_filter);
     
-    // Count items by type
-    let mut counts = std::collections::HashMap::new();
-    for item in &state.vault.vault_items {
-        let count = counts.entry(&item.item_type).or_insert(0);
-        *count += 1;
-    }
+    // Create tab titles with counts
+    let titles: Vec<Line> = TabType::iter()
+        .map(|tab| tab.title(state))
+        .collect();
     
-    let total_count = state.vault.vault_items.len();
-    let login_count = counts.get(&ItemType::Login).copied().unwrap_or(0);
-    let note_count = counts.get(&ItemType::SecureNote).copied().unwrap_or(0);
-    let card_count = counts.get(&ItemType::Card).copied().unwrap_or(0);
-    let identity_count = counts.get(&ItemType::Identity).copied().unwrap_or(0);
+    // Get the selected tab index
+    let selected_index = TabType::iter()
+        .position(|tab| tab == current_tab)
+        .unwrap_or(0);
     
-    // Build tab spans
-    let mut spans = Vec::new();
-    
-    // All tab
-    let all_style = if active_filter.is_none() {
-        Style::default()
-            .fg(Color::Black)
-            .bg(Color::Cyan)
-            .add_modifier(Modifier::BOLD)
-    } else {
-        Style::default().fg(Color::White)
-    };
-    spans.push(Span::styled(
-        format!("^1 All ({})", total_count),
-        all_style,
-    ));
-    spans.push(Span::styled(" | ", Style::default().fg(Color::DarkGray)));
-    
-    // Login tab
-    let login_style = if active_filter == Some(ItemType::Login) {
-        Style::default()
-            .fg(Color::Black)
-            .bg(Color::Cyan)
-            .add_modifier(Modifier::BOLD)
-    } else {
-        Style::default().fg(Color::White)
-    };
-    spans.push(Span::styled(
-        format!("^2 Logins ({})", login_count),
-        login_style,
-    ));
-    spans.push(Span::styled(" | ", Style::default().fg(Color::DarkGray)));
-    
-    // Notes tab
-    let note_style = if active_filter == Some(ItemType::SecureNote) {
-        Style::default()
-            .fg(Color::Black)
-            .bg(Color::Cyan)
-            .add_modifier(Modifier::BOLD)
-    } else {
-        Style::default().fg(Color::White)
-    };
-    spans.push(Span::styled(
-        format!("^3 Notes ({})", note_count),
-        note_style,
-    ));
-    spans.push(Span::styled(" | ", Style::default().fg(Color::DarkGray)));
-    
-    // Cards tab
-    let card_style = if active_filter == Some(ItemType::Card) {
-        Style::default()
-            .fg(Color::Black)
-            .bg(Color::Cyan)
-            .add_modifier(Modifier::BOLD)
-    } else {
-        Style::default().fg(Color::White)
-    };
-    spans.push(Span::styled(
-        format!("^4 Cards ({})", card_count),
-        card_style,
-    ));
-    spans.push(Span::styled(" | ", Style::default().fg(Color::DarkGray)));
-    
-    // Identities tab
-    let identity_style = if active_filter == Some(ItemType::Identity) {
-        Style::default()
-            .fg(Color::Black)
-            .bg(Color::Cyan)
-            .add_modifier(Modifier::BOLD)
-    } else {
-        Style::default().fg(Color::White)
-    };
-    spans.push(Span::styled(
-        format!("^5 Identities ({})", identity_count),
-        identity_style,
-    ));
-    
-    let paragraph = Paragraph::new(Line::from(spans))
+    // Create the Tabs widget
+    let tabs = Tabs::new(titles)
         .block(
             Block::default()
                 .borders(Borders::ALL)
                 .title(" Item Types ")
-                .border_style(Style::default().fg(Color::Cyan)),
-        );
+        )
+        .select(selected_index)
+        .highlight_style(current_tab.highlight_style())
+        .divider("");
     
-    frame.render_widget(paragraph, area);
+    frame.render_widget(tabs, area);
 }

@@ -25,6 +25,7 @@ thiserror = "1.0"
 
 # Utilities
 chrono = { version = "0.4", features = ["serde"] }
+strum = { version = "0.25", features = ["derive"] }
 
 # Filtering
 fuzzy-matcher = "0.3"

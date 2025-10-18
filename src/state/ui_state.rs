@@ -218,6 +218,40 @@ impl UIState {
     pub fn get_active_filter(&self) -> Option<ItemType> {
         self.active_item_type_filter
     }
+
+    /// Cycle to the next tab in order: All -> Login -> Note -> Card -> Identity -> All
+    pub fn cycle_next_tab(&mut self) {
+        self.active_item_type_filter = match self.active_item_type_filter {
+            None => Some(ItemType::Login),
+            Some(ItemType::Login) => Some(ItemType::SecureNote),
+            Some(ItemType::SecureNote) => Some(ItemType::Card),
+            Some(ItemType::Card) => Some(ItemType::Identity),
+            Some(ItemType::Identity) => None, // Cycle back to All
+        };
+    }
+
+    /// Cycle to the previous tab in order: All <- Login <- Note <- Card <- Identity <- All
+    pub fn cycle_previous_tab(&mut self) {
+        self.active_item_type_filter = match self.active_item_type_filter {
+            None => Some(ItemType::Identity), // Cycle back to Identity
+            Some(ItemType::Login) => None,
+            Some(ItemType::SecureNote) => Some(ItemType::Login),
+            Some(ItemType::Card) => Some(ItemType::SecureNote),
+            Some(ItemType::Identity) => Some(ItemType::Card),
+        };
+    }
+
+    /// Select tab by index (0=All, 1=Login, 2=SecureNote, 3=Card, 4=Identity)
+    pub fn select_tab_by_index(&mut self, index: usize) {
+        self.active_item_type_filter = match index {
+            0 => None, // All
+            1 => Some(ItemType::Login),
+            2 => Some(ItemType::SecureNote),
+            3 => Some(ItemType::Card),
+            4 => Some(ItemType::Identity),
+            _ => self.active_item_type_filter, // Invalid index, keep current
+        };
+    }
 }
 
 impl Default for UIState {
