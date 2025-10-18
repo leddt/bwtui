@@ -27,9 +27,6 @@ pub fn handle_ui(action: &Action, state: &mut AppState) -> bool {
         Action::SelectItemTypeTab(filter) => {
             state.set_item_type_filter(*filter);
         }
-        Action::SelectTabByIndex(index) => {
-            state.ui.select_tab_by_index(*index);
-        }
         Action::CycleNextTab => {
             state.cycle_next_tab();
         }

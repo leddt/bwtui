@@ -54,7 +54,6 @@ pub enum Action {
 
     // Tab switching
     SelectItemTypeTab(Option<crate::types::ItemType>),
-    SelectTabByIndex(usize),
     CycleNextTab,
     CyclePreviousTab,
 }
@@ -197,13 +196,6 @@ impl EventHandler {
             (KeyCode::Char('3'), KeyModifiers::CONTROL) => Some(Action::SelectItemTypeTab(Some(crate::types::ItemType::SecureNote))),
             (KeyCode::Char('4'), KeyModifiers::CONTROL) => Some(Action::SelectItemTypeTab(Some(crate::types::ItemType::Card))),
             (KeyCode::Char('5'), KeyModifiers::CONTROL) => Some(Action::SelectItemTypeTab(Some(crate::types::ItemType::Identity))),
-
-            // Tab switching with number keys (direct selection)
-            (KeyCode::Char('1'), KeyModifiers::NONE) => Some(Action::SelectTabByIndex(0)), // All types
-            (KeyCode::Char('2'), KeyModifiers::NONE) => Some(Action::SelectTabByIndex(1)), // Login
-            (KeyCode::Char('3'), KeyModifiers::NONE) => Some(Action::SelectTabByIndex(2)), // SecureNote
-            (KeyCode::Char('4'), KeyModifiers::NONE) => Some(Action::SelectTabByIndex(3)), // Card
-            (KeyCode::Char('5'), KeyModifiers::NONE) => Some(Action::SelectTabByIndex(4)), // Identity
 
             // Tab cycling with Tab key
             (KeyCode::Tab, KeyModifiers::SHIFT) => Some(Action::CyclePreviousTab),
