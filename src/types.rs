@@ -188,17 +188,6 @@ impl VaultItem {
             })
     }
 
-    /// Get the card number for display (masked)
-    pub fn card_number(&self) -> Option<String> {
-        self.card.as_ref().and_then(|c| c.number.as_ref()).map(|num| {
-            if num.len() >= 4 {
-                format!("****-****-****-{}", &num[num.len()-4..])
-            } else {
-                "****-****-****-****".to_string()
-            }
-        })
-    }
-
     /// Get the card brand for display
     pub fn card_brand(&self) -> Option<&str> {
         self.card.as_ref().and_then(|c| c.brand.as_deref())
@@ -209,25 +198,5 @@ impl VaultItem {
         self.identity.as_ref().and_then(|i| i.email.as_deref())
     }
 
-    /// Get the identity full name for display
-    pub fn identity_full_name(&self) -> Option<String> {
-        self.identity.as_ref().and_then(|i| {
-            let mut parts = Vec::new();
-            if let Some(first) = &i.first_name {
-                parts.push(first.clone());
-            }
-            if let Some(middle) = &i.middle_name {
-                parts.push(middle.clone());
-            }
-            if let Some(last) = &i.last_name {
-                parts.push(last.clone());
-            }
-            if parts.is_empty() {
-                None
-            } else {
-                Some(parts.join(" "))
-            }
-        })
-    }
 }
 

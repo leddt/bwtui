@@ -7,7 +7,7 @@ use ratatui::{
 };
 
 pub fn render(frame: &mut Frame) {
-    let area = centered_rect(70, 35, frame.size());
+    let area = centered_rect(70, 35, frame.area());
     
     // Clear the entire dialog area first
     frame.render_widget(Clear, area);

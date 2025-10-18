@@ -24,7 +24,7 @@ impl UI {
 
     pub fn render(&mut self, state: &mut AppState) -> Result<()> {
         self.terminal.draw(|frame| {
-            let status_bar_height = widgets::status_bar::calculate_height(frame.size().width, state);
+            let status_bar_height = widgets::status_bar::calculate_height(frame.area().width, state);
             
             let chunks = Layout::default()
                 .direction(Direction::Vertical)
@@ -34,7 +34,7 @@ impl UI {
                     Constraint::Min(0),                 // Entry list and details
                     Constraint::Length(status_bar_height), // Status bar (dynamic height)
                 ])
-                .split(frame.size());
+                .split(frame.area());
 
             widgets::search_box::render(frame, chunks[0], state);
             widgets::tab_bar::render(frame, chunks[1], state);

@@ -241,17 +241,6 @@ impl UIState {
         };
     }
 
-    /// Select tab by index (0=All, 1=Login, 2=SecureNote, 3=Card, 4=Identity)
-    pub fn select_tab_by_index(&mut self, index: usize) {
-        self.active_item_type_filter = match index {
-            0 => None, // All
-            1 => Some(ItemType::Login),
-            2 => Some(ItemType::SecureNote),
-            3 => Some(ItemType::Card),
-            4 => Some(ItemType::Identity),
-            _ => self.active_item_type_filter, // Invalid index, keep current
-        };
-    }
 }
 
 impl Default for UIState {
