@@ -1,4 +1,5 @@
 use crate::state::{AppState, MessageLevel};
+use crate::types::ItemType;
 use ratatui::{
     layout::{Alignment, Rect},
     style::{Color, Style},
@@ -6,6 +7,54 @@ use ratatui::{
     widgets::{Block, Borders, Paragraph, Wrap},
     Frame,
 };
+
+/// Get copy shortcuts based on the selected item type
+fn get_copy_shortcuts_for_item_type(item_type: Option<ItemType>) -> Vec<&'static str> {
+    match item_type {
+        Some(ItemType::Login) => {
+            vec![
+                "^U:Username",
+                "^P:Password", 
+                "^T:TOTP",
+            ]
+        }
+        Some(ItemType::Card) => {
+            vec![
+                "^N:Card Number",
+                "^M:CVV",
+            ]
+        }
+        _ => {
+            vec![]
+        }
+    }
+}
+
+/// Get all available shortcuts (copy + navigation + other actions)
+fn get_all_shortcuts(state: &AppState) -> Vec<&'static str> {
+    let mut shortcuts = vec![
+        "↑↓:Navigate",
+    ];
+    
+    // Add copy shortcuts based on selected item type
+    let copy_shortcuts = if let Some(item) = state.selected_item() {
+        get_copy_shortcuts_for_item_type(Some(item.item_type))
+    } else {
+        get_copy_shortcuts_for_item_type(None)
+    };
+    
+    shortcuts.extend(copy_shortcuts);
+    
+    // Add other common shortcuts
+    shortcuts.extend(vec![
+        "^D:Details",
+        "^R:Refresh",
+        "^X:Clear search",
+        "ESC:Quit",
+    ]);
+    
+    shortcuts
+}
 
 pub fn render(frame: &mut Frame, area: Rect, state: &AppState) {
     let status_text = if let Some(status_msg) = &state.status_message {
@@ -20,17 +69,8 @@ pub fn render(frame: &mut Frame, area: Rect, state: &AppState) {
             .style(style)
             .alignment(Alignment::Left)
     } else {
-        // Show keybindings with wrapping support
-        let bindings = vec![
-            "↑↓:Navigate",
-            "^U:Username",
-            "^P:Password",
-            "^T:TOTP",
-            "^D:Details",
-            "^R:Refresh",
-            "^X:Clear search",
-            "^Q:Quit",
-        ];
+        // Show dynamic keybindings with wrapping support
+        let bindings = get_all_shortcuts(state);
 
         let mut spans = Vec::new();
         for (i, binding) in bindings.iter().enumerate() {
@@ -62,17 +102,8 @@ pub fn calculate_height(width: u16, state: &AppState) -> u16 {
         return 3;
     }
     
-    // Calculate height needed for keybindings
-    let bindings = vec![
-        "↑↓:Navigate",
-        "^U:Username",
-        "^P:Password",
-        "^T:TOTP",
-        "^D:Details",
-        "^R:Refresh",
-        "^X:Clear search",
-        "^Q:Quit",
-    ];
+    // Calculate height needed for dynamic keybindings
+    let bindings = get_all_shortcuts(state);
     
     // Account for borders (2 chars) and some padding
     let available_width = width.saturating_sub(4) as usize;
