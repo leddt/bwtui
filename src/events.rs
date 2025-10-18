@@ -28,6 +28,8 @@ pub enum Action {
     CopyUsername,
     CopyPassword,
     CopyTotp,
+    CopyCardNumber,
+    CopyCardCvv,
     FetchTotp,
     Refresh,
     ToggleDetailsPanel,
@@ -49,6 +51,9 @@ pub enum Action {
 
     // Details panel actions
     CloseDetailsPanel,
+
+    // Tab switching
+    SelectItemTypeTab(Option<crate::types::ItemType>),
 }
 
 pub struct EventHandler;
@@ -178,8 +183,17 @@ impl EventHandler {
             (KeyCode::Char('u'), KeyModifiers::CONTROL) => Some(Action::CopyUsername),
             (KeyCode::Char('p'), KeyModifiers::CONTROL) => Some(Action::CopyPassword),
             (KeyCode::Char('t'), KeyModifiers::CONTROL) => Some(Action::CopyTotp),
+            (KeyCode::Char('n'), KeyModifiers::CONTROL) => Some(Action::CopyCardNumber),
+            (KeyCode::Char('m'), KeyModifiers::CONTROL) => Some(Action::CopyCardCvv),
             (KeyCode::Char('r'), KeyModifiers::CONTROL) => Some(Action::Refresh),
             (KeyCode::Char('d'), KeyModifiers::CONTROL) => Some(Action::ToggleDetailsPanel),
+
+            // Tab switching with number keys
+        (KeyCode::Char('1'), KeyModifiers::CONTROL) => Some(Action::SelectItemTypeTab(None)), // All types
+        (KeyCode::Char('2'), KeyModifiers::CONTROL) => Some(Action::SelectItemTypeTab(Some(crate::types::ItemType::Login))),
+        (KeyCode::Char('3'), KeyModifiers::CONTROL) => Some(Action::SelectItemTypeTab(Some(crate::types::ItemType::SecureNote))),
+        (KeyCode::Char('4'), KeyModifiers::CONTROL) => Some(Action::SelectItemTypeTab(Some(crate::types::ItemType::Card))),
+        (KeyCode::Char('5'), KeyModifiers::CONTROL) => Some(Action::SelectItemTypeTab(Some(crate::types::ItemType::Identity))),
 
             // Any other printable character updates the filter
             (KeyCode::Char(c), KeyModifiers::NONE) | (KeyCode::Char(c), KeyModifiers::SHIFT) => {

@@ -26,102 +26,23 @@ pub fn render(frame: &mut Frame, area: Rect, state: &mut AppState) {
         ]));
         lines.push(Line::from(""));
         
-        // Username
-        if let Some(login) = &item.login {
-            if let Some(username) = &login.username {
-                lines.push(Line::from(vec![
-                    Span::styled("Username: ", Style::default().fg(Color::Cyan).add_modifier(Modifier::BOLD)),
-                    Span::styled(username, Style::default().fg(Color::White)),
-                    Span::styled(" [^U]", Style::default().fg(Color::DarkGray)),
-                ]));
-            } else {
-                lines.push(Line::from(vec![
-                    Span::styled("Username: ", Style::default().fg(Color::Cyan).add_modifier(Modifier::BOLD)),
-                    Span::styled("(none)", Style::default().fg(Color::DarkGray)),
-                ]));
+        // Render type-specific content
+        match item.item_type {
+            crate::types::ItemType::Login => {
+                render_login_details(&mut lines, item, state);
             }
-            lines.push(Line::from(""));
-            
-            // Password (masked or loading)
-            if !state.secrets_available() {
-                // Show loading spinner when secrets are not yet available
-                lines.push(Line::from(vec![
-                    Span::styled("Password: ", Style::default().fg(Color::Cyan).add_modifier(Modifier::BOLD)),
-                    Span::styled(format!("{} Loading...", state.sync_spinner()), Style::default().fg(Color::Yellow)),
-                ]));
-            } else if login.password.is_some() {
-                lines.push(Line::from(vec![
-                    Span::styled("Password: ", Style::default().fg(Color::Cyan).add_modifier(Modifier::BOLD)),
-                    Span::styled("••••••••", Style::default().fg(Color::Yellow)),
-                    Span::styled(" [^P]", Style::default().fg(Color::DarkGray)),
-                ]));
-            } else {
-                lines.push(Line::from(vec![
-                    Span::styled("Password: ", Style::default().fg(Color::Cyan).add_modifier(Modifier::BOLD)),
-                    Span::styled("(none)", Style::default().fg(Color::DarkGray)),
-                ]));
+            crate::types::ItemType::SecureNote => {
+                render_secure_note_details(&mut lines, item, state);
             }
-            lines.push(Line::from(""));
-            
-            // TOTP (or loading)
-            if !state.secrets_available() {
-                // Show loading spinner when secrets are not yet available
-                lines.push(Line::from(vec![
-                    Span::styled("TOTP: ", Style::default().fg(Color::Cyan).add_modifier(Modifier::BOLD)),
-                    Span::styled(format!("{} Loading...", state.sync_spinner()), Style::default().fg(Color::Yellow)),
-                ]));
-            } else if let Some(_totp_secret) = &login.totp {
-                if state.totp_loading() {
-                    // Show loading spinner when fetching TOTP from CLI
-                    lines.push(Line::from(vec![
-                        Span::styled("TOTP: ", Style::default().fg(Color::Cyan).add_modifier(Modifier::BOLD)),
-                        Span::styled(format!("{} Loading...", state.sync_spinner()), Style::default().fg(Color::Yellow)),
-                    ]));
-                } else if let Some(code) = state.current_totp_code() {
-                    if let Some(remaining) = state.totp_remaining_seconds() {
-                        lines.push(Line::from(vec![
-                            Span::styled("TOTP: ", Style::default().fg(Color::Cyan).add_modifier(Modifier::BOLD)),
-                            Span::styled(code.clone(), Style::default().fg(Color::Green).add_modifier(Modifier::BOLD)),
-                            Span::styled(format!(" ({}s)", remaining), Style::default().fg(Color::DarkGray)),
-                            Span::styled(" [^T]", Style::default().fg(Color::DarkGray)),
-                        ]));
-                    } else {
-                        lines.push(Line::from(vec![
-                            Span::styled("TOTP: ", Style::default().fg(Color::Cyan).add_modifier(Modifier::BOLD)),
-                            Span::styled(code.clone(), Style::default().fg(Color::Green).add_modifier(Modifier::BOLD)),
-                            Span::styled(" [^T]", Style::default().fg(Color::DarkGray)),
-                        ]));
-                    }
-                } else {
-                    lines.push(Line::from(vec![
-                        Span::styled("TOTP: ", Style::default().fg(Color::Cyan).add_modifier(Modifier::BOLD)),
-                        Span::styled("(click to load)", Style::default().fg(Color::DarkGray)),
-                    ]));
-                }
-            } else {
-                lines.push(Line::from(vec![
-                    Span::styled("TOTP: ", Style::default().fg(Color::Cyan).add_modifier(Modifier::BOLD)),
-                    Span::styled("(none)", Style::default().fg(Color::DarkGray)),
-                ]));
+            crate::types::ItemType::Card => {
+                render_card_details(&mut lines, item, state);
             }
-            lines.push(Line::from(""));
-            
-            // URIs
-            if let Some(uris) = &login.uris {
-                if !uris.is_empty() {
-                    lines.push(Line::from(Span::styled("URIs: ", Style::default().fg(Color::Cyan).add_modifier(Modifier::BOLD))));
-                    for uri in uris.iter() {
-                        lines.push(Line::from(vec![
-                            Span::styled("  • ", Style::default().fg(Color::DarkGray)),
-                            Span::styled(&uri.uri, Style::default().fg(Color::Blue)),
-                        ]));
-                    }
-                    lines.push(Line::from(""));
-                }
+            crate::types::ItemType::Identity => {
+                render_identity_details(&mut lines, item, state);
             }
         }
         
-        // Notes (or loading)
+        // Notes (common to all types)
         if !state.secrets_available() {
             // Show loading spinner when secrets are not yet available
             lines.push(Line::from(vec![
@@ -137,6 +58,31 @@ pub fn render(frame: &mut Frame, area: Rect, state: &mut AppState) {
                 for line in notes.lines() {
                     lines.push(Line::from(Span::styled(line, Style::default().fg(Color::White))));
                 }
+            }
+        }
+        
+        // Custom fields (common to all types)
+        if !state.secrets_available() {
+            // Show loading spinner when secrets are not yet available
+            lines.push(Line::from(vec![
+                Span::styled("Custom Fields: ", Style::default().fg(Color::Cyan).add_modifier(Modifier::BOLD)),
+                Span::styled(format!("{} Loading...", state.sync_spinner()), Style::default().fg(Color::Yellow)),
+            ]));
+        } else if let Some(fields) = &item.fields {
+            if !fields.is_empty() {
+                lines.push(Line::from(Span::styled("Custom Fields: ", Style::default().fg(Color::Cyan).add_modifier(Modifier::BOLD))));
+                lines.push(Line::from(""));
+                
+                   for field in fields.iter() {
+                       if let (Some(name), Some(value)) = (&field.name, &field.value) {
+                           if !name.is_empty() && !value.is_empty() {
+                               lines.push(Line::from(vec![
+                                   Span::styled(format!("{}: ", name), Style::default().fg(Color::Cyan)),
+                                   Span::styled(value, Style::default().fg(Color::White)),
+                               ]));
+                           }
+                       }
+                   }
             }
         }
         
@@ -325,6 +271,277 @@ impl Clickable for DetailsClickHandler {
         }
         
         None
+    }
+}
+
+/// Render login-specific details
+fn render_login_details<'a>(lines: &mut Vec<Line<'a>>, item: &'a crate::types::VaultItem, state: &AppState) {
+    if let Some(login) = &item.login {
+        // Username
+        if let Some(username) = &login.username {
+            lines.push(Line::from(vec![
+                Span::styled("Username: ", Style::default().fg(Color::Cyan).add_modifier(Modifier::BOLD)),
+                Span::styled(username, Style::default().fg(Color::White)),
+                Span::styled(" [^U]", Style::default().fg(Color::DarkGray)),
+            ]));
+        } else {
+            lines.push(Line::from(vec![
+                Span::styled("Username: ", Style::default().fg(Color::Cyan).add_modifier(Modifier::BOLD)),
+                Span::styled("(none)", Style::default().fg(Color::DarkGray)),
+            ]));
+        }
+        lines.push(Line::from(""));
+        
+        // Password (masked or loading)
+        if !state.secrets_available() {
+            lines.push(Line::from(vec![
+                Span::styled("Password: ", Style::default().fg(Color::Cyan).add_modifier(Modifier::BOLD)),
+                Span::styled(format!("{} Loading...", state.sync_spinner()), Style::default().fg(Color::Yellow)),
+            ]));
+        } else if login.password.is_some() {
+            lines.push(Line::from(vec![
+                Span::styled("Password: ", Style::default().fg(Color::Cyan).add_modifier(Modifier::BOLD)),
+                Span::styled("••••••••", Style::default().fg(Color::Yellow)),
+                Span::styled(" [^P]", Style::default().fg(Color::DarkGray)),
+            ]));
+        } else {
+            lines.push(Line::from(vec![
+                Span::styled("Password: ", Style::default().fg(Color::Cyan).add_modifier(Modifier::BOLD)),
+                Span::styled("(none)", Style::default().fg(Color::DarkGray)),
+            ]));
+        }
+        lines.push(Line::from(""));
+        
+        // TOTP (or loading)
+        if !state.secrets_available() {
+            lines.push(Line::from(vec![
+                Span::styled("TOTP: ", Style::default().fg(Color::Cyan).add_modifier(Modifier::BOLD)),
+                Span::styled(format!("{} Loading...", state.sync_spinner()), Style::default().fg(Color::Yellow)),
+            ]));
+        } else if let Some(_totp_secret) = &login.totp {
+            if state.totp_loading() {
+                lines.push(Line::from(vec![
+                    Span::styled("TOTP: ", Style::default().fg(Color::Cyan).add_modifier(Modifier::BOLD)),
+                    Span::styled(format!("{} Loading...", state.sync_spinner()), Style::default().fg(Color::Yellow)),
+                ]));
+            } else if let Some(code) = state.current_totp_code() {
+                if let Some(remaining) = state.totp_remaining_seconds() {
+                    lines.push(Line::from(vec![
+                        Span::styled("TOTP: ", Style::default().fg(Color::Cyan).add_modifier(Modifier::BOLD)),
+                        Span::styled(code.clone(), Style::default().fg(Color::Green).add_modifier(Modifier::BOLD)),
+                        Span::styled(format!(" ({}s)", remaining), Style::default().fg(Color::DarkGray)),
+                        Span::styled(" [^T]", Style::default().fg(Color::DarkGray)),
+                    ]));
+                } else {
+                    lines.push(Line::from(vec![
+                        Span::styled("TOTP: ", Style::default().fg(Color::Cyan).add_modifier(Modifier::BOLD)),
+                        Span::styled(code.clone(), Style::default().fg(Color::Green).add_modifier(Modifier::BOLD)),
+                        Span::styled(" [^T]", Style::default().fg(Color::DarkGray)),
+                    ]));
+                }
+            } else {
+                lines.push(Line::from(vec![
+                    Span::styled("TOTP: ", Style::default().fg(Color::Cyan).add_modifier(Modifier::BOLD)),
+                    Span::styled("(click to load)", Style::default().fg(Color::DarkGray)),
+                ]));
+            }
+        } else {
+            lines.push(Line::from(vec![
+                Span::styled("TOTP: ", Style::default().fg(Color::Cyan).add_modifier(Modifier::BOLD)),
+                Span::styled("(none)", Style::default().fg(Color::DarkGray)),
+            ]));
+        }
+        lines.push(Line::from(""));
+        
+        // URIs
+        if let Some(uris) = &login.uris {
+            if !uris.is_empty() {
+                lines.push(Line::from(Span::styled("URIs: ", Style::default().fg(Color::Cyan).add_modifier(Modifier::BOLD))));
+                for uri in uris.iter() {
+                    lines.push(Line::from(vec![
+                        Span::styled("  • ", Style::default().fg(Color::DarkGray)),
+                        Span::styled(&uri.uri, Style::default().fg(Color::Blue)),
+                    ]));
+                }
+                lines.push(Line::from(""));
+            }
+        }
+    }
+}
+
+/// Render secure note-specific details
+fn render_secure_note_details<'a>(_lines: &mut Vec<Line<'a>>, _item: &'a crate::types::VaultItem, _state: &AppState) {
+    // Secure notes only have name and notes, which are handled in the common section
+    // No additional fields needed
+}
+
+/// Render card-specific details
+fn render_card_details<'a>(lines: &mut Vec<Line<'a>>, item: &'a crate::types::VaultItem, state: &AppState) {
+    if let Some(card) = &item.card {
+        // Brand
+        if let Some(brand) = &card.brand {
+            lines.push(Line::from(vec![
+                Span::styled("Brand: ", Style::default().fg(Color::Cyan).add_modifier(Modifier::BOLD)),
+                Span::styled(brand, Style::default().fg(Color::White)),
+            ]));
+        }
+        lines.push(Line::from(""));
+        
+        // Cardholder Name
+        if let Some(name) = &card.card_holder_name {
+            lines.push(Line::from(vec![
+                Span::styled("Cardholder: ", Style::default().fg(Color::Cyan).add_modifier(Modifier::BOLD)),
+                Span::styled(name, Style::default().fg(Color::White)),
+            ]));
+        }
+        lines.push(Line::from(""));
+        
+        // Card Number (masked or loading)
+        if !state.secrets_available() {
+            lines.push(Line::from(vec![
+                Span::styled("Number: ", Style::default().fg(Color::Cyan).add_modifier(Modifier::BOLD)),
+                Span::styled(format!("{} Loading...", state.sync_spinner()), Style::default().fg(Color::Yellow)),
+            ]));
+        } else if card.number.is_some() {
+            lines.push(Line::from(vec![
+                Span::styled("Number: ", Style::default().fg(Color::Cyan).add_modifier(Modifier::BOLD)),
+                Span::styled("••••-••••-••••-••••", Style::default().fg(Color::Yellow)),
+                Span::styled(" [^N]", Style::default().fg(Color::DarkGray)),
+            ]));
+        } else {
+            lines.push(Line::from(vec![
+                Span::styled("Number: ", Style::default().fg(Color::Cyan).add_modifier(Modifier::BOLD)),
+                Span::styled("(none)", Style::default().fg(Color::DarkGray)),
+            ]));
+        }
+        lines.push(Line::from(""));
+        
+        // Expiry
+        if let (Some(month), Some(year)) = (&card.exp_month, &card.exp_year) {
+            lines.push(Line::from(vec![
+                Span::styled("Expiry: ", Style::default().fg(Color::Cyan).add_modifier(Modifier::BOLD)),
+                Span::styled(format!("{}/{}", month, year), Style::default().fg(Color::White)),
+            ]));
+        }
+        lines.push(Line::from(""));
+        
+        // CVV (masked or loading)
+        if !state.secrets_available() {
+            lines.push(Line::from(vec![
+                Span::styled("CVV: ", Style::default().fg(Color::Cyan).add_modifier(Modifier::BOLD)),
+                Span::styled(format!("{} Loading...", state.sync_spinner()), Style::default().fg(Color::Yellow)),
+            ]));
+        } else if card.code.is_some() {
+            lines.push(Line::from(vec![
+                Span::styled("CVV: ", Style::default().fg(Color::Cyan).add_modifier(Modifier::BOLD)),
+                Span::styled("•••", Style::default().fg(Color::Yellow)),
+                Span::styled(" [^M]", Style::default().fg(Color::DarkGray)),
+            ]));
+        } else {
+            lines.push(Line::from(vec![
+                Span::styled("CVV: ", Style::default().fg(Color::Cyan).add_modifier(Modifier::BOLD)),
+                Span::styled("(none)", Style::default().fg(Color::DarkGray)),
+            ]));
+        }
+        lines.push(Line::from(""));
+    }
+}
+
+/// Render identity-specific details
+fn render_identity_details<'a>(lines: &mut Vec<Line<'a>>, item: &'a crate::types::VaultItem, _state: &AppState) {
+    if let Some(identity) = &item.identity {
+        // Name section
+        let mut name_parts = Vec::new();
+        if let Some(title) = &identity.title {
+            name_parts.push(title.clone());
+        }
+        if let Some(first) = &identity.first_name {
+            name_parts.push(first.clone());
+        }
+        if let Some(middle) = &identity.middle_name {
+            name_parts.push(middle.clone());
+        }
+        if let Some(last) = &identity.last_name {
+            name_parts.push(last.clone());
+        }
+        
+        if !name_parts.is_empty() {
+            lines.push(Line::from(Span::styled("Name: ", Style::default().fg(Color::Cyan).add_modifier(Modifier::BOLD))));
+            lines.push(Line::from(Span::styled(name_parts.join(" "), Style::default().fg(Color::White))));
+            lines.push(Line::from(""));
+        }
+        
+        // Address section
+        let mut address_parts = Vec::new();
+        if let Some(addr1) = &identity.address1 {
+            address_parts.push(addr1.clone());
+        }
+        if let Some(addr2) = &identity.address2 {
+            address_parts.push(addr2.clone());
+        }
+        if let Some(addr3) = &identity.address3 {
+            address_parts.push(addr3.clone());
+        }
+        if let Some(city) = &identity.city {
+            address_parts.push(city.clone());
+        }
+        if let Some(state) = &identity.state {
+            address_parts.push(state.clone());
+        }
+        if let Some(postal) = &identity.postal_code {
+            address_parts.push(postal.clone());
+        }
+        if let Some(country) = &identity.country {
+            address_parts.push(country.clone());
+        }
+        
+        if !address_parts.is_empty() {
+            lines.push(Line::from(Span::styled("Address: ", Style::default().fg(Color::Cyan).add_modifier(Modifier::BOLD))));
+            lines.push(Line::from(Span::styled(address_parts.join(", "), Style::default().fg(Color::White))));
+            lines.push(Line::from(""));
+        }
+        
+        // Contact section
+        if let Some(phone) = &identity.phone {
+            lines.push(Line::from(vec![
+                Span::styled("Phone: ", Style::default().fg(Color::Cyan).add_modifier(Modifier::BOLD)),
+                Span::styled(phone, Style::default().fg(Color::White)),
+            ]));
+        }
+        if let Some(email) = &identity.email {
+            lines.push(Line::from(vec![
+                Span::styled("Email: ", Style::default().fg(Color::Cyan).add_modifier(Modifier::BOLD)),
+                Span::styled(email, Style::default().fg(Color::White)),
+            ]));
+        }
+        if let Some(username) = &identity.username {
+            lines.push(Line::from(vec![
+                Span::styled("Username: ", Style::default().fg(Color::Cyan).add_modifier(Modifier::BOLD)),
+                Span::styled(username, Style::default().fg(Color::White)),
+            ]));
+        }
+        lines.push(Line::from(""));
+        
+        // ID section
+        if let Some(ssn) = &identity.ssn {
+            lines.push(Line::from(vec![
+                Span::styled("SSN: ", Style::default().fg(Color::Cyan).add_modifier(Modifier::BOLD)),
+                Span::styled(ssn, Style::default().fg(Color::White)),
+            ]));
+        }
+        if let Some(license) = &identity.license_number {
+            lines.push(Line::from(vec![
+                Span::styled("License: ", Style::default().fg(Color::Cyan).add_modifier(Modifier::BOLD)),
+                Span::styled(license, Style::default().fg(Color::White)),
+            ]));
+        }
+        if let Some(passport) = &identity.passport_number {
+            lines.push(Line::from(vec![
+                Span::styled("Passport: ", Style::default().fg(Color::Cyan).add_modifier(Modifier::BOLD)),
+                Span::styled(passport, Style::default().fg(Color::White)),
+            ]));
+        }
+        lines.push(Line::from(""));
     }
 }
 

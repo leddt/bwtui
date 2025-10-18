@@ -39,14 +39,39 @@ pub fn render(frame: &mut Frame, area: Rect, state: &mut AppState) {
                 spans.push(Span::styled("★ ", Style::default().fg(Color::Yellow)));
             }
 
+            // Add type indicator
+            let type_indicator = match item.item_type {
+                crate::types::ItemType::Login => "🔑",
+                crate::types::ItemType::SecureNote => "📝",
+                crate::types::ItemType::Card => "💳",
+                crate::types::ItemType::Identity => "👤",
+            };
+            spans.push(Span::styled(type_indicator, Style::default().fg(Color::Yellow)));
+            spans.push(Span::styled(" ", style));
+
             // Add item name
             spans.push(Span::styled(&item.name, style));
 
-            // Add username if available
-            if let Some(username) = item.username() {
+            // Add type-specific subtitle
+            let subtitle = match item.item_type {
+                crate::types::ItemType::Login => {
+                    item.username().map(|u| format!("({})", u))
+                }
+                crate::types::ItemType::SecureNote => {
+                    None // No subtitle for notes
+                }
+                crate::types::ItemType::Card => {
+                    item.card_brand().map(|b| format!("({})", b))
+                }
+                crate::types::ItemType::Identity => {
+                    item.identity_email().map(|e| format!("({})", e))
+                }
+            };
+
+            if let Some(subtitle) = subtitle {
                 spans.push(Span::styled(" ", style));
                 spans.push(Span::styled(
-                    format!("({})", username),
+                    subtitle,
                     if is_selected {
                         Style::default().fg(Color::Black).bg(Color::Cyan)
                     } else {

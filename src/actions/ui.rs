@@ -24,6 +24,9 @@ pub fn handle_ui(action: &Action, state: &mut AppState) -> bool {
                 state.toggle_details_panel();
             }
         }
+        Action::SelectItemTypeTab(filter) => {
+            state.set_item_type_filter(*filter);
+        }
         _ => {
             return false; // Not a UI action
         }

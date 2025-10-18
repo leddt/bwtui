@@ -85,7 +85,7 @@ impl AppState {
 
     pub fn append_filter(&mut self, c: char) {
         let old_selection = self.vault.selected_item().map(|item| item.id.clone());
-        self.vault.append_filter(c);
+        self.vault.append_filter(c, self.ui.get_active_filter());
         let new_selection = self.vault.selected_item().map(|item| item.id.clone());
         
         // Clear TOTP if selection changed
@@ -98,7 +98,7 @@ impl AppState {
 
     pub fn delete_filter_char(&mut self) {
         let old_selection = self.vault.selected_item().map(|item| item.id.clone());
-        self.vault.delete_filter_char();
+        self.vault.delete_filter_char(self.ui.get_active_filter());
         let new_selection = self.vault.selected_item().map(|item| item.id.clone());
         
         // Clear TOTP if selection changed
@@ -111,7 +111,7 @@ impl AppState {
 
     pub fn clear_filter(&mut self) {
         let old_selection = self.vault.selected_item().map(|item| item.id.clone());
-        self.vault.clear_filter();
+        self.vault.clear_filter(self.ui.get_active_filter());
         let new_selection = self.vault.selected_item().map(|item| item.id.clone());
         
         // Clear TOTP if selection changed
@@ -297,6 +297,15 @@ impl AppState {
 
     pub fn totp_loading(&self) -> bool {
         self.ui.totp_loading
+    }
+
+    // Tab filtering
+    pub fn set_item_type_filter(&mut self, filter: Option<crate::types::ItemType>) {
+        self.ui.set_item_type_filter(filter);
+        // Reapply filter with new type filter
+        self.vault.apply_filter(filter);
+        self.reset_details_scroll();
+        self.clear_totp_code(); // Clear TOTP when switching tabs
     }
 }
 

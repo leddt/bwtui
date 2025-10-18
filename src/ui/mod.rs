@@ -30,12 +30,14 @@ impl UI {
                 .direction(Direction::Vertical)
                 .constraints([
                     Constraint::Length(3),              // Search box
+                    Constraint::Length(3),              // Tab bar
                     Constraint::Min(0),                 // Entry list and details
                     Constraint::Length(status_bar_height), // Status bar (dynamic height)
                 ])
                 .split(frame.size());
 
             widgets::search_box::render(frame, chunks[0], state);
+            widgets::tab_bar::render(frame, chunks[1], state);
             
             // Split the middle section horizontally if details panel is visible
             if state.details_panel_visible() {
@@ -45,19 +47,19 @@ impl UI {
                         Constraint::Percentage(50),     // Entry list
                         Constraint::Percentage(50),     // Details panel
                     ])
-                    .split(chunks[1]);
+                    .split(chunks[2]);
                 
                 state.ui.list_area = main_chunks[0];
                 state.ui.details_panel_area = main_chunks[1];
                 widgets::entry_list::render(frame, main_chunks[0], state);
                 widgets::details::render(frame, main_chunks[1], state);
             } else {
-                state.ui.list_area = chunks[1];
+                state.ui.list_area = chunks[2];
                 state.ui.details_panel_area = ratatui::layout::Rect::default();
-                widgets::entry_list::render(frame, chunks[1], state);
+                widgets::entry_list::render(frame, chunks[2], state);
             }
             
-            widgets::status_bar::render(frame, chunks[2], state);
+            widgets::status_bar::render(frame, chunks[3], state);
 
             // Render password input dialog, save token prompt, or not logged in error on top if active
             if state.password_input_mode() {

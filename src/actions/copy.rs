@@ -29,6 +29,14 @@ pub fn handle_copy(
         Action::CopyTotp => {
             copy_totp(state, clipboard, cli)
         }
+        Action::CopyCardNumber => {
+            copy_card_number(state, clipboard);
+            CopyResult::Handled
+        }
+        Action::CopyCardCvv => {
+            copy_card_cvv(state, clipboard);
+            CopyResult::Handled
+        }
         _ => {
             CopyResult::NotHandled // Not a copy action
         }
@@ -165,5 +173,93 @@ fn copy_totp(state: &mut AppState, clipboard: Option<&mut ClipboardManager>, cli
         }
     }
     CopyResult::Handled
+}
+
+fn copy_card_number(state: &mut AppState, clipboard: Option<&mut ClipboardManager>) {
+    if !state.secrets_available() {
+        state.set_status(
+            "⏳ Please wait, loading vault secrets...",
+            MessageLevel::Warning,
+        );
+        return;
+    }
+
+    if let Some(item) = state.selected_item() {
+        if item.item_type != crate::types::ItemType::Card {
+            state.set_status("✗ This is not a card entry", MessageLevel::Warning);
+            return;
+        }
+
+        if let Some(card) = &item.card {
+            if let Some(number) = &card.number {
+                if let Some(cb) = clipboard {
+                    match cb.copy(number) {
+                        Ok(_) => {
+                            state.set_status(
+                                "✓ Card number copied to clipboard (hidden for security)",
+                                MessageLevel::Success,
+                            );
+                        }
+                        Err(_) => {
+                            state.set_status(
+                                "✗ Failed to copy to clipboard",
+                                MessageLevel::Error,
+                            );
+                        }
+                    }
+                } else {
+                    state.set_status("✗ Clipboard not available", MessageLevel::Error);
+                }
+            } else {
+                state.set_status("✗ No card number for this entry", MessageLevel::Warning);
+            }
+        } else {
+            state.set_status("✗ No card data for this entry", MessageLevel::Warning);
+        }
+    }
+}
+
+fn copy_card_cvv(state: &mut AppState, clipboard: Option<&mut ClipboardManager>) {
+    if !state.secrets_available() {
+        state.set_status(
+            "⏳ Please wait, loading vault secrets...",
+            MessageLevel::Warning,
+        );
+        return;
+    }
+
+    if let Some(item) = state.selected_item() {
+        if item.item_type != crate::types::ItemType::Card {
+            state.set_status("✗ This is not a card entry", MessageLevel::Warning);
+            return;
+        }
+
+        if let Some(card) = &item.card {
+            if let Some(cvv) = &card.code {
+                if let Some(cb) = clipboard {
+                    match cb.copy(cvv) {
+                        Ok(_) => {
+                            state.set_status(
+                                "✓ CVV copied to clipboard (hidden for security)",
+                                MessageLevel::Success,
+                            );
+                        }
+                        Err(_) => {
+                            state.set_status(
+                                "✗ Failed to copy to clipboard",
+                                MessageLevel::Error,
+                            );
+                        }
+                    }
+                } else {
+                    state.set_status("✗ Clipboard not available", MessageLevel::Error);
+                }
+            } else {
+                state.set_status("✗ No CVV for this entry", MessageLevel::Warning);
+            }
+        } else {
+            state.set_status("✗ No card data for this entry", MessageLevel::Warning);
+        }
+    }
 }
 

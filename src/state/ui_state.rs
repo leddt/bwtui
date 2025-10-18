@@ -1,4 +1,5 @@
 use ratatui::layout::Rect;
+use crate::types::ItemType;
 
 use std::time::{SystemTime, UNIX_EPOCH};
 
@@ -23,6 +24,8 @@ pub struct UIState {
     pub totp_copy_pending: bool, // Whether we're waiting to copy TOTP after fetch
     pub last_totp_fetch: Option<u64>, // Unix timestamp of last TOTP fetch attempt
     pub totp_item_id: Option<String>, // ID of the item that the current TOTP code belongs to
+    // Tab filtering state
+    pub active_item_type_filter: Option<ItemType>, // None = all types, Some = specific type
 }
 
 impl UIState {
@@ -45,6 +48,7 @@ impl UIState {
             totp_copy_pending: false,
             last_totp_fetch: None,
             totp_item_id: None,
+            active_item_type_filter: None, // Default to showing all types
         }
     }
 
@@ -203,6 +207,16 @@ impl UIState {
         } else {
             None
         }
+    }
+
+    /// Set the active item type filter
+    pub fn set_item_type_filter(&mut self, filter: Option<ItemType>) {
+        self.active_item_type_filter = filter;
+    }
+
+    /// Get the active item type filter
+    pub fn get_active_filter(&self) -> Option<ItemType> {
+        self.active_item_type_filter
     }
 }
 

@@ -38,7 +38,7 @@ impl VaultState {
     /// Load items from cache (without secrets)
     pub fn load_cached_items(&mut self, items: Vec<VaultItem>) {
         self.vault_items = items;
-        self.apply_filter();
+        self.apply_filter(None); // No type filter when loading from cache
         self.initial_load_complete = true;
         self.secrets_available = false;
     }
@@ -46,15 +46,24 @@ impl VaultState {
     /// Load items with full data including secrets
     pub fn load_items_with_secrets(&mut self, items: Vec<VaultItem>) {
         self.vault_items = items;
-        self.apply_filter();
+        self.apply_filter(None); // No type filter when loading with secrets
         self.initial_load_complete = true;
         self.secrets_available = true;
     }
 
-    pub fn apply_filter(&mut self) {
+    pub fn apply_filter(&mut self, type_filter: Option<crate::types::ItemType>) {
+        // First filter by item type if specified
+        let mut items = if let Some(filter_type) = type_filter {
+            self.vault_items.iter()
+                .filter(|item| item.item_type == filter_type)
+                .cloned()
+                .collect()
+        } else {
+            self.vault_items.clone()
+        };
+
         if self.filter_query.is_empty() {
-            // When no filter is active, show all items with starred items first
-            let mut items = self.vault_items.clone();
+            // When no text filter is active, show all items with starred items first
             items.sort_by(|a, b| {
                 // Sort by favorite status (true before false), then by name
                 match (b.favorite, a.favorite) {
@@ -73,8 +82,7 @@ impl VaultState {
             };
 
             // Collect items with their relevance scores
-            let mut items_with_scores: Vec<(VaultItem, i64)> = self
-                .vault_items
+            let mut items_with_scores: Vec<(VaultItem, i64)> = items
                 .iter()
                 .filter_map(|item| {
                     let searchable_text = self.get_searchable_text(item);
@@ -207,19 +215,19 @@ impl VaultState {
         }
     }
 
-    pub fn append_filter(&mut self, c: char) {
+    pub fn append_filter(&mut self, c: char, type_filter: Option<crate::types::ItemType>) {
         self.filter_query.push(c);
-        self.apply_filter();
+        self.apply_filter(type_filter);
     }
 
-    pub fn delete_filter_char(&mut self) {
+    pub fn delete_filter_char(&mut self, type_filter: Option<crate::types::ItemType>) {
         self.filter_query.pop();
-        self.apply_filter();
+        self.apply_filter(type_filter);
     }
 
-    pub fn clear_filter(&mut self) {
+    pub fn clear_filter(&mut self, type_filter: Option<crate::types::ItemType>) {
         self.filter_query.clear();
-        self.apply_filter();
+        self.apply_filter(type_filter);
     }
 }
 

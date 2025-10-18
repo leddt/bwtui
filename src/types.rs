@@ -9,7 +9,13 @@ pub struct VaultItem {
     #[serde(rename = "type")]
     pub item_type: ItemType,
     pub login: Option<LoginData>,
+    #[serde(default)]
+    pub card: Option<CardData>,
+    #[serde(default)]
+    pub identity: Option<IdentityData>,
     pub notes: Option<String>,
+    #[serde(default)]
+    pub fields: Option<Vec<CustomField>>,
     pub favorite: bool,
     #[serde(default)]
     pub folder_id: Option<String>,
@@ -32,9 +38,6 @@ pub struct VaultItem {
     pub password_history: Option<Vec<serde_json::Value>>,
     #[serde(default, skip_serializing)]
     #[allow(dead_code)]
-    pub fields: Option<Vec<serde_json::Value>>,
-    #[serde(default, skip_serializing)]
-    #[allow(dead_code)]
     pub attachments: Option<Vec<serde_json::Value>>,
     #[serde(default, skip_serializing)]
     #[allow(dead_code)]
@@ -44,7 +47,7 @@ pub struct VaultItem {
     pub reprompt: Option<u8>,
 }
 
-#[derive(Debug, Clone, PartialEq)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
 pub enum ItemType {
     Login,
     SecureNote,
@@ -110,6 +113,57 @@ pub struct Uri {
     pub match_type: Option<serde_json::Value>,
 }
 
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct CardData {
+    pub brand: Option<String>,
+    #[serde(rename = "cardholderName")]
+    pub card_holder_name: Option<String>,
+    pub number: Option<String>,
+    #[serde(rename = "expMonth")]
+    pub exp_month: Option<String>,
+    #[serde(rename = "expYear")]
+    pub exp_year: Option<String>,
+    pub code: Option<String>, // CVV
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct IdentityData {
+    pub title: Option<String>,
+    #[serde(rename = "firstName")]
+    pub first_name: Option<String>,
+    #[serde(rename = "middleName")]
+    pub middle_name: Option<String>,
+    #[serde(rename = "lastName")]
+    pub last_name: Option<String>,
+    pub address1: Option<String>,
+    pub address2: Option<String>,
+    pub address3: Option<String>,
+    pub city: Option<String>,
+    pub state: Option<String>,
+    #[serde(rename = "postalCode")]
+    pub postal_code: Option<String>,
+    pub country: Option<String>,
+    pub phone: Option<String>,
+    pub email: Option<String>,
+    pub ssn: Option<String>,
+    #[serde(rename = "licenseNumber")]
+    pub license_number: Option<String>,
+    #[serde(rename = "passportNumber")]
+    pub passport_number: Option<String>,
+    pub username: Option<String>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct CustomField {
+    pub name: Option<String>,
+    pub value: Option<String>,
+    #[serde(rename = "type")]
+    pub field_type: Option<u8>,
+}
+
 impl VaultItem {
     /// Get the username for display
     pub fn username(&self) -> Option<&str> {
@@ -132,6 +186,48 @@ impl VaultItem {
                     .unwrap_or(&uri.uri)
                     .to_string()
             })
+    }
+
+    /// Get the card number for display (masked)
+    pub fn card_number(&self) -> Option<String> {
+        self.card.as_ref().and_then(|c| c.number.as_ref()).map(|num| {
+            if num.len() >= 4 {
+                format!("****-****-****-{}", &num[num.len()-4..])
+            } else {
+                "****-****-****-****".to_string()
+            }
+        })
+    }
+
+    /// Get the card brand for display
+    pub fn card_brand(&self) -> Option<&str> {
+        self.card.as_ref().and_then(|c| c.brand.as_deref())
+    }
+
+    /// Get the identity email for display
+    pub fn identity_email(&self) -> Option<&str> {
+        self.identity.as_ref().and_then(|i| i.email.as_deref())
+    }
+
+    /// Get the identity full name for display
+    pub fn identity_full_name(&self) -> Option<String> {
+        self.identity.as_ref().and_then(|i| {
+            let mut parts = Vec::new();
+            if let Some(first) = &i.first_name {
+                parts.push(first.clone());
+            }
+            if let Some(middle) = &i.middle_name {
+                parts.push(middle.clone());
+            }
+            if let Some(last) = &i.last_name {
+                parts.push(last.clone());
+            }
+            if parts.is_empty() {
+                None
+            } else {
+                Some(parts.join(" "))
+            }
+        })
     }
 }
 

@@ -19,6 +19,7 @@ use std::time::Duration;
 
 #[tokio::main]
 async fn main() -> Result<()> {
+    
     // Run the application and handle cleanup
     let result = run().await;
     
