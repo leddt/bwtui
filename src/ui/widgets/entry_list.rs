@@ -2,7 +2,7 @@ use crate::state::AppState;
 use crate::ui::widgets::clickable::{Clickable, is_click_in_area};
 use crossterm::event::MouseEvent;
 use ratatui::{
-    layout::Rect,
+    layout::{Alignment, Rect},
     style::{Color, Modifier, Style},
     text::{Line, Span},
     widgets::{Block, Borders, List, ListItem},
@@ -102,13 +102,6 @@ pub fn render(frame: &mut Frame, area: Rect, state: &mut AppState) {
         format!(" {} Loading vault... ", state.sync_spinner())
     } else if state.vault.filtered_items.is_empty() {
         " No entries found ".to_string()
-    } else if state.syncing() {
-        format!(
-            " Vault Entries ({}/{}) {} Syncing... ",
-            state.vault.filtered_items.len(),
-            state.vault.vault_items.len(),
-            state.sync_spinner()
-        )
     } else {
         format!(
             " Vault Entries ({}/{}) ",
@@ -123,14 +116,19 @@ pub fn render(frame: &mut Frame, area: Rect, state: &mut AppState) {
         Style::default().fg(Color::White)
     };
 
-    let list = List::new(items)
-        .block(
-            Block::default()
-                .borders(Borders::ALL)
-                .title(title)
-                .title_bottom(Line::from("↑↓:Navigate"))
-                .border_style(title_style),
-        )
+    // Create the block with conditional right-aligned syncing indicator
+    let mut block = Block::default()
+        .borders(Borders::ALL)
+        .title(title)
+        .title_bottom(Line::from("↑↓:Navigate"))
+        .border_style(title_style);
+
+    // Add syncing indicator on the right when syncing (but not during initial load)
+    if state.syncing() && state.initial_load_complete() {
+        block = block.title(Line::from(format!(" {} Syncing... ", state.sync_spinner())).alignment(Alignment::Right));
+    }
+
+    let list = List::new(items).block(block)
         .highlight_style(
             Style::default()
                 .fg(Color::Black)
