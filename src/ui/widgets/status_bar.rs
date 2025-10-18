@@ -30,11 +30,9 @@ fn get_copy_shortcuts_for_item_type(item_type: Option<ItemType>) -> Vec<&'static
     }
 }
 
-/// Get all available shortcuts (copy + navigation + other actions)
+/// Get all available shortcuts (copy + other actions)
 fn get_all_shortcuts(state: &AppState) -> Vec<&'static str> {
-    let mut shortcuts = vec![
-        "↑↓:Navigate",
-    ];
+    let mut shortcuts = vec![];
     
     // Add copy shortcuts based on selected item type
     let copy_shortcuts = if let Some(item) = state.selected_item() {
@@ -49,8 +47,7 @@ fn get_all_shortcuts(state: &AppState) -> Vec<&'static str> {
     shortcuts.extend(vec![
         "^D:Details",
         "^R:Refresh",
-        "^X:Clear search",
-        "ESC:Quit",
+        "^Q:Quit",
     ]);
     
     shortcuts

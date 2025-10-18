@@ -128,6 +128,7 @@ pub fn render(frame: &mut Frame, area: Rect, state: &mut AppState) {
             Block::default()
                 .borders(Borders::ALL)
                 .title(title)
+                .title_bottom(Line::from("↑↓:Navigate"))
                 .border_style(title_style),
         )
         .highlight_style(

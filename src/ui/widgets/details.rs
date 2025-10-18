@@ -96,17 +96,26 @@ pub fn render(frame: &mut Frame, area: Rect, state: &mut AppState) {
             }
         }).sum::<u16>() as usize;
         
+        let max_visible_lines = available_height as usize;
+        
+        // Determine if scrollbar will be shown
+        let scrollbar_visible = content_height > max_visible_lines;
+        
+        // Create the block with conditional scroll shortcut
+        let mut block = Block::default()
+            .borders(Borders::ALL)
+            .title(" Details ")
+            .border_style(Style::default().fg(Color::Cyan));
+        
+        // Add scroll shortcut at bottom when scrollbar is visible
+        if scrollbar_visible {
+            block = block.title_bottom(Line::from("Shift+↑↓:Scroll"));
+        }
+        
         // Create the paragraph
         let paragraph = Paragraph::new(lines)
-            .block(
-                Block::default()
-                    .borders(Borders::ALL)
-                    .title(" Details ")
-                    .border_style(Style::default().fg(Color::Cyan)),
-            )
+            .block(block)
             .wrap(Wrap { trim: false });
-        
-        let max_visible_lines = available_height as usize;
         
         // Calculate maximum scroll position based on actual content height
         // Allow some overscroll to ensure scrollbar reaches the bottom
