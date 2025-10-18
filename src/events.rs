@@ -6,6 +6,7 @@ use crate::ui::widgets::{details::DetailsClickHandler, entry_list::EntryListClic
 #[derive(Debug, Clone)]
 pub enum Action {
     Quit,
+    LockAndQuit, // Clear session token and quit
     Tick, // Periodic update for TOTP countdown and other time-based updates
 
     // Navigation
@@ -161,6 +162,9 @@ impl EventHandler {
 
             // Quit
             (KeyCode::Char('q'), KeyModifiers::CONTROL) => Some(Action::Quit),
+            
+            // Lock and quit (clear session token and quit)
+            (KeyCode::Char('l'), KeyModifiers::CONTROL) => Some(Action::LockAndQuit),
 
             // Navigation - Vim style with Ctrl+Shift (details panel scrolling)
             (KeyCode::Char('K'), _) if key.modifiers.contains(KeyModifiers::CONTROL) => Some(Action::ScrollDetailsUp),
@@ -217,9 +221,8 @@ impl EventHandler {
             (KeyCode::Left, _) => Some(Action::CyclePreviousTab),
             (KeyCode::Right, _) => Some(Action::CycleNextTab),
 
-            // Tab cycling with Ctrl+H/L (Vim-style)
+            // Tab cycling with Ctrl+H (Vim-style)
             (KeyCode::Char('h'), KeyModifiers::CONTROL) => Some(Action::CyclePreviousTab),
-            (KeyCode::Char('l'), KeyModifiers::CONTROL) => Some(Action::CycleNextTab),
 
             // Any other printable character updates the filter
             (KeyCode::Char(c), KeyModifiers::NONE) | (KeyCode::Char(c), KeyModifiers::SHIFT) => {

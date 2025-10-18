@@ -47,6 +47,7 @@ fn get_all_shortcuts(state: &AppState) -> Vec<&'static str> {
     shortcuts.extend(vec![
         "^D:Details",
         "^R:Refresh",
+        "^L:Lock&Quit",
         "^Q:Quit",
     ]);
     

@@ -451,6 +451,30 @@ impl App {
             return false;
         }
 
+        // Handle lock and quit action (clear session token and cache, then quit)
+        if matches!(action, Action::LockAndQuit) {
+            let mut errors = Vec::new();
+            
+            // Clear the session token
+            if let Err(e) = session_manager.clear_token() {
+                errors.push(format!("Failed to clear session token: {}", e));
+            }
+            
+            // Clear the vault cache
+            if let Err(e) = crate::cache::clear_cache() {
+                errors.push(format!("Failed to clear vault cache: {}", e));
+            }
+            
+            // Show status message
+            if errors.is_empty() {
+                self.state.set_status("Session token and cache cleared", crate::state::MessageLevel::Info);
+            } else {
+                self.state.set_status(&format!("Lock and quit completed with errors: {}", errors.join(", ")), crate::state::MessageLevel::Warning);
+            }
+            
+            return false;
+        }
+
         // Handle tick action (periodic UI updates)
         if matches!(action, Action::Tick) {
             // Check if we need to refresh TOTP code

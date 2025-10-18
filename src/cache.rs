@@ -264,6 +264,19 @@ pub fn save_cache(data: &CachedVaultData) -> Result<()> {
     Ok(())
 }
 
+/// Clear the cache file
+pub fn clear_cache() -> Result<()> {
+    let cache_path = get_cache_path()?;
+    
+    if cache_path.exists() {
+        fs::remove_file(&cache_path).map_err(|e| {
+            BwError::CommandFailed(format!("Failed to remove cache file: {}", e))
+        })?;
+    }
+    
+    Ok(())
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
