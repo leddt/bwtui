@@ -5,18 +5,13 @@ use ratatui::{
     layout::Rect,
     style::{Color, Modifier, Style},
     text::{Line, Span},
-    widgets::{Block, Borders, Paragraph, Wrap},
+    widgets::{Block, Borders, Paragraph, Wrap, Scrollbar, ScrollbarOrientation, ScrollbarState},
     Frame,
 };
 
 pub fn render(frame: &mut Frame, area: Rect, state: &mut AppState) {
-    // Calculate max scroll first
-    let max_scroll = calculate_max_scroll(state, area);
-    state.set_details_max_scroll(max_scroll);
-    
-    let selected_item = state.selected_item();
-    
-    let content = if let Some(item) = selected_item {
+    if let Some(item) = state.selected_item() {
+        // Generate all content lines
         let mut lines = Vec::new();
         
         // Title/Name
@@ -52,7 +47,6 @@ pub fn render(frame: &mut Frame, area: Rect, state: &mut AppState) {
         } else if let Some(notes) = &item.notes {
             if !notes.is_empty() {
                 lines.push(Line::from(Span::styled("Notes: ", Style::default().fg(Color::Cyan).add_modifier(Modifier::BOLD))));
-                lines.push(Line::from(""));
                 
                 // Split notes by newlines and display all lines
                 for line in notes.lines() {
@@ -64,117 +58,106 @@ pub fn render(frame: &mut Frame, area: Rect, state: &mut AppState) {
         // Custom fields (common to all types)
         if !state.secrets_available() {
             // Show loading spinner when secrets are not yet available
+                lines.push(Line::from(""));
             lines.push(Line::from(vec![
                 Span::styled("Custom Fields: ", Style::default().fg(Color::Cyan).add_modifier(Modifier::BOLD)),
                 Span::styled(format!("{} Loading...", state.sync_spinner()), Style::default().fg(Color::Yellow)),
             ]));
         } else if let Some(fields) = &item.fields {
             if !fields.is_empty() {
-                lines.push(Line::from(Span::styled("Custom Fields: ", Style::default().fg(Color::Cyan).add_modifier(Modifier::BOLD))));
                 lines.push(Line::from(""));
+                lines.push(Line::from(Span::styled("Custom Fields: ", Style::default().fg(Color::Cyan).add_modifier(Modifier::BOLD))));
                 
-                   for field in fields.iter() {
-                       if let (Some(name), Some(value)) = (&field.name, &field.value) {
-                           if !name.is_empty() && !value.is_empty() {
-                               lines.push(Line::from(vec![
-                                   Span::styled(format!("{}: ", name), Style::default().fg(Color::Cyan)),
-                                   Span::styled(value, Style::default().fg(Color::White)),
-                               ]));
-                           }
-                       }
-                   }
+                for field in fields.iter() {
+                    if let (Some(name), Some(value)) = (&field.name, &field.value) {
+                        if !name.is_empty() && !value.is_empty() {
+                            lines.push(Line::from(vec![
+                                Span::styled("  • ", Style::default().fg(Color::DarkGray)),
+                                Span::styled(format!("{}: ", name), Style::default().fg(Color::Cyan)),
+                                Span::styled(value, Style::default().fg(Color::White)),
+                            ]));
+                        }
+                    }
+                }
             }
         }
         
-        // Apply scrolling
-        let scroll_offset = state.ui.details_panel_scroll;
+        // Calculate the actual content height after wrapping
+        let available_width = area.width.saturating_sub(2); // Account for borders
         let available_height = area.height.saturating_sub(2); // Account for borders
-        let total_lines = lines.len();
         
-        // Calculate how many lines we can show
-        let max_visible_lines = available_height as usize;
+        // Calculate how many lines the content will actually take after wrapping
+        let content_height = lines.iter().map(|line| {
+            let line_width = line.width() as u16;
+            if line_width > available_width {
+                (line_width / available_width) + 1
+            } else {
+                1
+            }
+        }).sum::<u16>() as usize;
         
-        // Calculate maximum scroll position
-        let max_scroll = if total_lines > max_visible_lines {
-            total_lines - max_visible_lines
-        } else {
-            0
-        };
-        
-        // Clamp scroll position to valid range
-        let clamped_scroll = scroll_offset.min(max_scroll);
-        
-        // Determine which lines to show based on scroll position
-        let start_line = clamped_scroll;
-        let end_line = (start_line + max_visible_lines).min(total_lines);
-        
-        // Extract the visible lines
-        let visible_lines = if start_line < total_lines {
-            lines[start_line..end_line].to_vec()
-        } else {
-            vec![]
-        };
-        
-        Paragraph::new(visible_lines)
+        // Create the paragraph
+        let paragraph = Paragraph::new(lines)
             .block(
                 Block::default()
                     .borders(Borders::ALL)
                     .title(" Details ")
                     .border_style(Style::default().fg(Color::Cyan)),
             )
-            .wrap(Wrap { trim: false })
+            .wrap(Wrap { trim: false });
+        
+        let max_visible_lines = available_height as usize;
+        
+        // Calculate maximum scroll position based on actual content height
+        // Allow some overscroll to ensure scrollbar reaches the bottom
+        let max_scroll = if content_height > max_visible_lines {
+            content_height - max_visible_lines + 3
+        } else {
+            0
+        };
+        
+        // Get current scroll position and clamp it
+        let scroll_offset = state.ui.details_panel_scroll.min(max_scroll);
+        
+        // Apply scrolling to the paragraph
+        let scrolled_paragraph = paragraph.scroll((scroll_offset as u16, 0));
+        
+        // Render the paragraph
+        frame.render_widget(scrolled_paragraph, area);
+        
+        // Render scrollbar if content overflows
+        if content_height > max_visible_lines {
+            // The scrollbar should represent the total content height
+            // With overscroll, we can use the scroll offset directly
+            let mut scrollbar_state = ScrollbarState::new(content_height)
+                .position(scroll_offset);
+            
+            let scrollbar = Scrollbar::new(ScrollbarOrientation::VerticalRight)
+                .begin_symbol(Some("↑"))
+                .end_symbol(Some("↓"))
+                .track_symbol(Some("│"))
+                .thumb_symbol("█");
+            
+            frame.render_stateful_widget(scrollbar, area, &mut scrollbar_state);
+        }
+        
+        // Update state with the calculated max scroll after rendering
+        state.set_details_max_scroll(max_scroll);
     } else {
-        Paragraph::new("No item selected")
+        // No item selected
+        let paragraph = Paragraph::new("No item selected")
             .style(Style::default().fg(Color::DarkGray))
             .block(
                 Block::default()
                     .borders(Borders::ALL)
                     .title(" Details ")
                     .border_style(Style::default().fg(Color::DarkGray)),
-            )
-    };
-    
-    
-    frame.render_widget(content, area);
-}
-
-fn calculate_max_scroll(state: &AppState, area: Rect) -> usize {
-    if let Some(item) = state.selected_item() {
-        let available_height = area.height.saturating_sub(2); // Account for borders
-        let total_lines = if let Some(login) = &item.login {
-            let mut lines = 0;
-            lines += 2; // Name + blank
-            if login.username.is_some() { lines += 2; } else { lines += 2; }
-            if login.password.is_some() { lines += 2; } else { lines += 2; }
-            if login.totp.is_some() { lines += 2; } else { lines += 2; }
-            if let Some(uris) = &login.uris {
-                if !uris.is_empty() {
-                    lines += 1; // URIs label
-                    lines += uris.len(); // Each URI
-                    lines += 1; // Blank after URIs
-                }
-            }
-            if let Some(notes) = &item.notes {
-                if !notes.is_empty() {
-                    lines += 2; // Notes label + blank
-                    lines += notes.lines().count(); // Each note line
-                }
-            }
-            lines
-        } else {
-            0
-        };
+            );
         
-        let max_visible_lines = available_height as usize;
-        if total_lines > max_visible_lines {
-            total_lines - max_visible_lines
-        } else {
-            0
-        }
-    } else {
-        0
+        frame.render_widget(paragraph, area);
     }
 }
+
 
 /// Details panel click handler
 pub struct DetailsClickHandler;
@@ -197,19 +180,45 @@ impl Clickable for DetailsClickHandler {
             return None;
         }
         
-        let content_line = relative_y - 1;
+        // Adjust for scroll offset
+        let scroll_offset = state.ui.details_panel_scroll;
+        let content_line = (relative_y - 1) as usize + scroll_offset;
         
-        // Layout of details panel (0-indexed from top of content):
-        // 0: Name: <name>
-        // 1: (blank)
-        // 2: Username: <username> [^U]  (if username exists)
-        // 3: (blank)
-        // 4: Password: •••••••• [^P]    (if password exists)
-        // 5: (blank)
-        // 6: TOTP: <code> (Xs) [^T]     (if TOTP exists)
-        // 7: (blank)
-        // ... URIs, notes, etc.
+        // Generate the same content structure as the render function to find clickable areas
+        let mut lines = Vec::new();
         
+        // Title/Name (2 lines: label + blank)
+        lines.push(Line::from(""));
+        lines.push(Line::from(""));
+        
+        // Username section
+        if login.username.is_some() {
+            lines.push(Line::from("")); // Username line
+            lines.push(Line::from("")); // Blank line
+        } else {
+            lines.push(Line::from("")); // Username line (no button)
+            lines.push(Line::from("")); // Blank line
+        }
+        
+        // Password section
+        if login.password.is_some() {
+            lines.push(Line::from("")); // Password line
+            lines.push(Line::from("")); // Blank line
+        } else {
+            lines.push(Line::from("")); // Password line (no button)
+            lines.push(Line::from("")); // Blank line
+        }
+        
+        // TOTP section
+        if login.totp.is_some() {
+            lines.push(Line::from("")); // TOTP line
+            lines.push(Line::from("")); // Blank line
+        } else {
+            lines.push(Line::from("")); // TOTP line (no button)
+            lines.push(Line::from("")); // Blank line
+        }
+        
+        // Check if we're clicking on a clickable line
         let mut current_line = 0;
         
         // Name (2 lines: label + blank)
@@ -219,7 +228,6 @@ impl Clickable for DetailsClickHandler {
         if login.username.is_some() {
             if content_line == current_line {
                 // Calculate approximate position of [^U] at end of line
-                // "Username: " (10) + username length + " [" (2) + "^U" (2) + "]" (1) = 15 + username length
                 let username_len = login.username.as_ref().unwrap().len() as u16;
                 let shortcut_start = 10 + username_len + 2; // After "Username: " + username + " ["
                 let shortcut_end = shortcut_start + 3; // "[^U]" is 4 characters
@@ -237,7 +245,6 @@ impl Clickable for DetailsClickHandler {
         if login.password.is_some() {
             if content_line == current_line {
                 // Calculate approximate position of [^P] at end of line
-                // "Password: " (10) + "••••••••" (8) + " [" (2) + "^P" (2) + "]" (1) = 23
                 let shortcut_start = 20; // After "Password: •••••••• ["
                 let shortcut_end = shortcut_start + 3; // "[^P]" is 4 characters
                 
@@ -256,7 +263,6 @@ impl Clickable for DetailsClickHandler {
                 // Check if we have a TOTP code displayed
                 if state.current_totp_code().is_some() {
                     // Calculate approximate position of [^T] at end of line
-                    // "TOTP: " (6) + "123456" (6) + " (Xs)" (5) + " [" (2) + "^T" (2) + "]" (1) = 22
                     let shortcut_start = 19; // After "TOTP: 123456 (Xs) ["
                     let shortcut_end = shortcut_start + 3; // "[^T]" is 4 characters
                     
@@ -290,7 +296,6 @@ fn render_login_details<'a>(lines: &mut Vec<Line<'a>>, item: &'a crate::types::V
                 Span::styled("(none)", Style::default().fg(Color::DarkGray)),
             ]));
         }
-        lines.push(Line::from(""));
         
         // Password (masked or loading)
         if !state.secrets_available() {
@@ -310,7 +315,6 @@ fn render_login_details<'a>(lines: &mut Vec<Line<'a>>, item: &'a crate::types::V
                 Span::styled("(none)", Style::default().fg(Color::DarkGray)),
             ]));
         }
-        lines.push(Line::from(""));
         
         // TOTP (or loading)
         if !state.secrets_available() {
@@ -385,7 +389,6 @@ fn render_card_details<'a>(lines: &mut Vec<Line<'a>>, item: &'a crate::types::Va
                 Span::styled(brand, Style::default().fg(Color::White)),
             ]));
         }
-        lines.push(Line::from(""));
         
         // Cardholder Name
         if let Some(name) = &card.card_holder_name {
@@ -394,7 +397,6 @@ fn render_card_details<'a>(lines: &mut Vec<Line<'a>>, item: &'a crate::types::Va
                 Span::styled(name, Style::default().fg(Color::White)),
             ]));
         }
-        lines.push(Line::from(""));
         
         // Card Number (masked or loading)
         if !state.secrets_available() {
@@ -414,7 +416,6 @@ fn render_card_details<'a>(lines: &mut Vec<Line<'a>>, item: &'a crate::types::Va
                 Span::styled("(none)", Style::default().fg(Color::DarkGray)),
             ]));
         }
-        lines.push(Line::from(""));
         
         // Expiry
         if let (Some(month), Some(year)) = (&card.exp_month, &card.exp_year) {
@@ -423,7 +424,6 @@ fn render_card_details<'a>(lines: &mut Vec<Line<'a>>, item: &'a crate::types::Va
                 Span::styled(format!("{}/{}", month, year), Style::default().fg(Color::White)),
             ]));
         }
-        lines.push(Line::from(""));
         
         // CVV (masked or loading)
         if !state.secrets_available() {
