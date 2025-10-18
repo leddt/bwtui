@@ -60,14 +60,18 @@ The binary will be available at `target/release/bwtui.exe` (Windows) or `target/
 
 ### Navigation
 
-- **Arrow Keys**: Navigate up/down through vault items
+- **Up/Down Arrow Keys**: Navigate up/down through vault items 
+  - Vim-style **Ctrl+J/K** also works
 - **Page Up/Down**: Jump by 10 items
 - **Home/End**: Jump to first/last item
-- **Enter**: Show details panel for selected item
 
-### Search
+### Search and filtering
 
 - Start typing to filter vault items
+- **Ctrl+X**: Clear filter
+- **Ctrl+1-5**: Select tab (item-type filter)
+- **Left/Right Arrow Keys**: Cycle through tabs
+  - **Ctrl+H/L** also works
 
 ### Copying Credentials
 
@@ -79,9 +83,9 @@ The binary will be available at `target/release/bwtui.exe` (Windows) or `target/
 
 ### Details Panel
 
-- **Tab**: Toggle details panel visibility
-- **Arrow Keys**: Scroll through details when panel is open
-- **Escape**: Close details panel
+- **Ctrl+D**: Toggle details panel visibility
+- **Shift+Arrow Keys**: Scroll through details when panel is open 
+  - **Ctrl+Shift+J/K** also works
 
 ### Other Actions
 
