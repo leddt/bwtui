@@ -186,6 +186,9 @@ impl App {
 
     /// Handle unlock result from background task
     fn handle_unlock_result(&mut self, result: UnlockResult) {
+        // Clear loading state regardless of result
+        self.state.sync.stop();
+        
         match result {
             UnlockResult::PasswordRequired(cli) => {
                 // Store the CLI temporarily and prompt for password
@@ -289,6 +292,10 @@ impl App {
             self.state.set_unlock_error("Password cannot be empty".to_string());
             return;
         }
+
+        // Set loading state and clear any previous error
+        self.state.sync.start();
+        self.state.set_unlock_error("".to_string()); // Clear previous error
 
         // Attempt unlock in background
         if let Some(ref cli) = self.bw_cli {
@@ -529,6 +536,9 @@ impl App {
             }
             Action::DeletePasswordChar => {
                 self.state.delete_password_char();
+            }
+            Action::ClearPassword => {
+                self.state.clear_password();
             }
             Action::SubmitPassword => {
                 let password = self.state.get_password();

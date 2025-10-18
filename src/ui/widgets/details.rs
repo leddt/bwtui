@@ -109,7 +109,7 @@ pub fn render(frame: &mut Frame, area: Rect, state: &mut AppState) {
         
         // Add scroll shortcut at bottom when scrollbar is visible
         if scrollbar_visible {
-            block = block.title_bottom(Line::from("Shift+↑↓:Scroll"));
+            block = block.title_bottom(Line::from(" Shift+↑↓:Scroll "));
         }
         
         // Create the paragraph

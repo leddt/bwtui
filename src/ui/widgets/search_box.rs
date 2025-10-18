@@ -27,7 +27,7 @@ pub fn render(frame: &mut Frame, area: Rect, state: &AppState) {
 
     // Add clear search shortcut on the right when there's text
     if !state.vault.filter_query.is_empty() {
-        block = block.title(Line::from("^X:Clear search").alignment(Alignment::Right));
+        block = block.title(Line::from(" ^X:Clear search ").alignment(Alignment::Right));
     }
 
     let paragraph = Paragraph::new(filter_text)

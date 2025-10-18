@@ -120,7 +120,7 @@ pub fn render(frame: &mut Frame, area: Rect, state: &mut AppState) {
     let mut block = Block::default()
         .borders(Borders::ALL)
         .title(title)
-        .title_bottom(Line::from("↑↓:Navigate"))
+        .title_bottom(Line::from(" ↑↓:Navigate "))
         .border_style(title_style);
 
     // Add syncing indicator on the right when syncing (but not during initial load)

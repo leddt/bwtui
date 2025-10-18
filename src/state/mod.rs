@@ -159,6 +159,10 @@ impl AppState {
         self.ui.delete_password_char();
     }
 
+    pub fn clear_password(&mut self) {
+        self.ui.clear_password();
+    }
+
     pub fn get_password(&self) -> String {
         self.ui.get_password()
     }

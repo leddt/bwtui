@@ -44,6 +44,7 @@ pub enum Action {
     CancelPasswordInput,
     AppendPasswordChar(char),
     DeletePasswordChar,
+    ClearPassword,
 
     // Save token actions
     SaveTokenYes,
@@ -96,6 +97,15 @@ impl EventHandler {
     fn handle_key(&self, key: KeyEvent, state: &AppState) -> Option<Action> {
         // Handle password input mode
         if state.password_input_mode() {
+            // If we're currently syncing (unlocking), only allow quit action
+            if state.syncing() {
+                return match (key.code, key.modifiers) {
+                    // Quit application (Ctrl+C always works)
+                    (KeyCode::Char('q'), KeyModifiers::CONTROL) => Some(Action::Quit),
+                    _ => None, // Ignore all other input during unlock
+                };
+            }
+            
             return match (key.code, key.modifiers) {
                 // Submit password
                 (KeyCode::Enter, _) => Some(Action::SubmitPassword),
@@ -103,6 +113,8 @@ impl EventHandler {
                 (KeyCode::Esc, _) => Some(Action::CancelPasswordInput),
                 // Delete character
                 (KeyCode::Backspace, _) => Some(Action::DeletePasswordChar),
+                // Clear password
+                (KeyCode::Char('x'), KeyModifiers::CONTROL) => Some(Action::ClearPassword),
                 // Quit application (Ctrl+C always works)
                 (KeyCode::Char('q'), KeyModifiers::CONTROL) => Some(Action::Quit),
                 // Any other printable character

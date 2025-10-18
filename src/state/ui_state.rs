@@ -102,6 +102,10 @@ impl UIState {
         self.password_input.pop();
     }
 
+    pub fn clear_password(&mut self) {
+        self.password_input.clear();
+    }
+
     pub fn get_password(&self) -> String {
         self.password_input.clone()
     }
