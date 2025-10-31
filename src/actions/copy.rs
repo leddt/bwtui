@@ -49,12 +49,14 @@ fn copy_username(state: &mut AppState, clipboard: Option<&mut ClipboardManager>)
             if let Some(cb) = clipboard {
                 match cb.copy(username) {
                     Ok(_) => {
+                        crate::logger::Logger::info("Username copied to clipboard");
                         state.set_status(
                             format!("✓ Username copied: {}", username),
                             MessageLevel::Success,
                         );
                     }
-                    Err(_) => {
+                    Err(e) => {
+                        crate::logger::Logger::error(&format!("Failed to copy username to clipboard: {}", e));
                         state.set_status(
                             "✗ Failed to copy to clipboard",
                             MessageLevel::Error,
@@ -85,12 +87,14 @@ fn copy_password(state: &mut AppState, clipboard: Option<&mut ClipboardManager>)
                 if let Some(cb) = clipboard {
                     match cb.copy(password) {
                         Ok(_) => {
+                            crate::logger::Logger::info("Password copied to clipboard");
                             state.set_status(
                                 "✓ Password copied to clipboard (hidden for security)",
                                 MessageLevel::Success,
                             );
                         }
-                        Err(_) => {
+                        Err(e) => {
+                            crate::logger::Logger::error(&format!("Failed to copy password to clipboard: {}", e));
                             state.set_status(
                                 "✗ Failed to copy to clipboard",
                                 MessageLevel::Error,
@@ -126,12 +130,14 @@ fn copy_totp(state: &mut AppState, clipboard: Option<&mut ClipboardManager>, cli
                         if let Some(cb) = clipboard {
                             match cb.copy(code) {
                                 Ok(_) => {
+                                    crate::logger::Logger::info("TOTP code copied to clipboard");
                                     state.set_status(
                                         format!("✓ TOTP code copied: {}", code),
                                         MessageLevel::Success,
                                     );
                                 }
-                                Err(_) => {
+                                Err(e) => {
+                                    crate::logger::Logger::error(&format!("Failed to copy TOTP to clipboard: {}", e));
                                     state.set_status(
                                         "✗ Failed to copy to clipboard",
                                         MessageLevel::Error,
@@ -195,12 +201,14 @@ fn copy_card_number(state: &mut AppState, clipboard: Option<&mut ClipboardManage
                 if let Some(cb) = clipboard {
                     match cb.copy(number) {
                         Ok(_) => {
+                            crate::logger::Logger::info("Card number copied to clipboard");
                             state.set_status(
                                 "✓ Card number copied to clipboard (hidden for security)",
                                 MessageLevel::Success,
                             );
                         }
-                        Err(_) => {
+                        Err(e) => {
+                            crate::logger::Logger::error(&format!("Failed to copy card number to clipboard: {}", e));
                             state.set_status(
                                 "✗ Failed to copy to clipboard",
                                 MessageLevel::Error,
@@ -239,12 +247,14 @@ fn copy_card_cvv(state: &mut AppState, clipboard: Option<&mut ClipboardManager>)
                 if let Some(cb) = clipboard {
                     match cb.copy(cvv) {
                         Ok(_) => {
+                            crate::logger::Logger::info("CVV copied to clipboard");
                             state.set_status(
                                 "✓ CVV copied to clipboard (hidden for security)",
                                 MessageLevel::Success,
                             );
                         }
-                        Err(_) => {
+                        Err(e) => {
+                            crate::logger::Logger::error(&format!("Failed to copy CVV to clipboard: {}", e));
                             state.set_status(
                                 "✗ Failed to copy to clipboard",
                                 MessageLevel::Error,

@@ -34,29 +34,46 @@ impl SessionManager {
     /// Load session token from encrypted file
     pub fn load_token(&self) -> Result<Option<String>> {
         if !self.session_file.exists() {
+            crate::logger::Logger::info("No session token file found");
             return Ok(None);
         }
 
         let encrypted_data = fs::read(&self.session_file).map_err(|e| {
-            BwError::CommandFailed(format!("Failed to read session file: {}", e))
+            let error_msg = format!("Failed to read session file: {}", e);
+            crate::logger::Logger::error(&error_msg);
+            BwError::CommandFailed(error_msg)
         })?;
 
         if encrypted_data.is_empty() {
+            crate::logger::Logger::info("Session token file is empty");
             return Ok(None);
         }
 
-        let token = Self::decrypt_data(&encrypted_data)?;
+        let token = Self::decrypt_data(&encrypted_data).map_err(|e| {
+            let error_msg = format!("Failed to decrypt session token: {}", e);
+            crate::logger::Logger::error(&error_msg);
+            e
+        })?;
+        
+        crate::logger::Logger::info("Session token loaded successfully");
         Ok(Some(token))
     }
 
     /// Save session token to encrypted file
     pub fn save_token(&self, token: &str) -> Result<()> {
-        let encrypted_data = Self::encrypt_data(token)?;
+        let encrypted_data = Self::encrypt_data(token).map_err(|e| {
+            let error_msg = format!("Failed to encrypt session token: {}", e);
+            crate::logger::Logger::error(&error_msg);
+            e
+        })?;
         
         fs::write(&self.session_file, encrypted_data).map_err(|e| {
-            BwError::CommandFailed(format!("Failed to write session file: {}", e))
+            let error_msg = format!("Failed to write session file: {}", e);
+            crate::logger::Logger::error(&error_msg);
+            BwError::CommandFailed(error_msg)
         })?;
 
+        crate::logger::Logger::info("Session token saved successfully");
         Ok(())
     }
 
@@ -65,8 +82,13 @@ impl SessionManager {
     pub fn clear_token(&self) -> Result<()> {
         if self.session_file.exists() {
             fs::remove_file(&self.session_file).map_err(|e| {
-                BwError::CommandFailed(format!("Failed to remove session file: {}", e))
+                let error_msg = format!("Failed to remove session file: {}", e);
+                crate::logger::Logger::error(&error_msg);
+                BwError::CommandFailed(error_msg)
             })?;
+            crate::logger::Logger::info("Session token cleared");
+        } else {
+            crate::logger::Logger::info("No session token file to clear");
         }
         Ok(())
     }
@@ -102,9 +124,9 @@ impl SessionManager {
             );
 
             if result == 0 {
-                return Err(BwError::CommandFailed(
-                    "Failed to encrypt data with DPAPI".to_string()
-                ));
+                let error_msg = "Failed to encrypt data with DPAPI";
+                crate::logger::Logger::error(error_msg);
+                return Err(BwError::CommandFailed(error_msg.to_string()));
             }
 
             // Copy the encrypted data
@@ -146,9 +168,9 @@ impl SessionManager {
             );
 
             if result == 0 {
-                return Err(BwError::CommandFailed(
-                    "Failed to decrypt data with DPAPI".to_string()
-                ));
+                let error_msg = "Failed to decrypt data with DPAPI";
+                crate::logger::Logger::error(error_msg);
+                return Err(BwError::CommandFailed(error_msg.to_string()));
             }
 
             // Copy the decrypted data
@@ -170,10 +192,18 @@ impl SessionManager {
         
         let username = whoami::username();
         let entry = Entry::new("bwtui-bitwarden", &username)
-            .map_err(|e| BwError::CommandFailed(format!("Failed to create keyring entry: {}", e)))?;
+            .map_err(|e| {
+                let error_msg = format!("Failed to create keyring entry: {}", e);
+                crate::logger::Logger::error(&error_msg);
+                BwError::CommandFailed(error_msg)
+            })?;
         
         entry.set_password(data)
-            .map_err(|e| BwError::CommandFailed(format!("Failed to save to keyring: {}", e)))?;
+            .map_err(|e| {
+                let error_msg = format!("Failed to save to keyring: {}", e);
+                crate::logger::Logger::error(&error_msg);
+                BwError::CommandFailed(error_msg)
+            })?;
         
         // Return a marker indicating data is in keyring
         Ok(b"KEYRING".to_vec())
@@ -187,12 +217,22 @@ impl SessionManager {
         if encrypted_data == b"KEYRING" {
             let username = whoami::username();
             let entry = Entry::new("bwtui-bitwarden", &username)
-                .map_err(|e| BwError::CommandFailed(format!("Failed to create keyring entry: {}", e)))?;
+                .map_err(|e| {
+                    let error_msg = format!("Failed to create keyring entry: {}", e);
+                    crate::logger::Logger::error(&error_msg);
+                    BwError::CommandFailed(error_msg)
+                })?;
             
             entry.get_password()
-                .map_err(|e| BwError::CommandFailed(format!("Failed to load from keyring: {}", e)))
+                .map_err(|e| {
+                    let error_msg = format!("Failed to load from keyring: {}", e);
+                    crate::logger::Logger::error(&error_msg);
+                    BwError::CommandFailed(error_msg)
+                })
         } else {
-            Err(BwError::CommandFailed("Invalid session file format".to_string()))
+            let error_msg = "Invalid session file format";
+            crate::logger::Logger::error(error_msg);
+            Err(BwError::CommandFailed(error_msg.to_string()))
         }
     }
 }

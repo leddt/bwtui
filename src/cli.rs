@@ -33,15 +33,33 @@ impl BitwardenCli {
             .stderr(Stdio::null())
             .output()
             .await
-            .map_err(|_| BwError::CliNotFound)?;
+            .map_err(|_| {
+                crate::logger::Logger::error("Bitwarden CLI not found. Please install: npm install -g @bitwarden/cli");
+                BwError::CliNotFound
+            })?;
 
         if !output.status.success() {
+            crate::logger::Logger::error("Bitwarden CLI not found or not executable");
             return Err(BwError::CliNotFound);
         }
 
+        crate::logger::Logger::info("Bitwarden CLI found and verified");
+
         // Load session token from encrypted storage
-        let session_manager = SessionManager::new()?;
-        let session_token = session_manager.load_token()?;
+        let session_manager = SessionManager::new().map_err(|e| {
+            crate::logger::Logger::error(&format!("Failed to initialize session manager: {}", e));
+            e
+        })?;
+        let session_token = session_manager.load_token().map_err(|e| {
+            crate::logger::Logger::warn(&format!("Failed to load session token: {}", e));
+            e
+        })?;
+
+        if session_token.is_some() {
+            crate::logger::Logger::info("Session token loaded from storage");
+        } else {
+            crate::logger::Logger::info("No session token found in storage");
+        }
 
         Ok(Self { session_token })
     }
@@ -51,32 +69,44 @@ impl BitwardenCli {
         let mut cmd = Command::new("bw");
         cmd.arg("status");
 
-        if let Some(token) = &self.session_token {
-            cmd.env("BW_SESSION", token);
+        if let Some(_token) = &self.session_token {
+            // Don't log the token, just indicate we're using one
+            cmd.env("BW_SESSION", _token);
         }
 
         let output = cmd
             .output()
             .await
-            .map_err(|e| BwError::CommandFailed(format!("Failed to execute bw status: {}", e)))?;
+            .map_err(|e| {
+                let error_msg = format!("Failed to execute bw status: {}", e);
+                crate::logger::Logger::error(&error_msg);
+                BwError::CommandFailed(error_msg)
+            })?;
 
         if !output.status.success() {
             let stderr = String::from_utf8_lossy(&output.stderr);
-            return Err(BwError::CommandFailed(format!(
-                "bw status failed: {}",
-                stderr
-            )));
+            let sanitized_stderr = crate::logger::Logger::sanitize_message(&stderr);
+            let error_msg = format!("bw status failed: {}", sanitized_stderr);
+            crate::logger::Logger::error(&error_msg);
+            return Err(BwError::CommandFailed(format!("bw status failed: {}", stderr)));
         }
 
         let status_response: StatusResponse = serde_json::from_slice(&output.stdout)
-            .map_err(|e| BwError::ParseError(format!("Failed to parse status: {}", e)))?;
+            .map_err(|e| {
+                let error_msg = format!("Failed to parse status: {}", e);
+                crate::logger::Logger::error(&error_msg);
+                BwError::ParseError(error_msg)
+            })?;
 
-        match status_response.status.as_str() {
-            "unlocked" => Ok(VaultStatus::Unlocked),
-            "locked" => Ok(VaultStatus::Locked),
-            "unauthenticated" => Ok(VaultStatus::Unauthenticated),
-            _ => Ok(VaultStatus::Locked),
-        }
+        let status = match status_response.status.as_str() {
+            "unlocked" => VaultStatus::Unlocked,
+            "locked" => VaultStatus::Locked,
+            "unauthenticated" => VaultStatus::Unauthenticated,
+            _ => VaultStatus::Locked,
+        };
+
+        crate::logger::Logger::info(&format!("Vault status: {:?}", status));
+        Ok(status)
     }
 
     /// List all vault items
@@ -84,25 +114,34 @@ impl BitwardenCli {
         let mut cmd = Command::new("bw");
         cmd.arg("list").arg("items");
 
-        if let Some(token) = &self.session_token {
-            cmd.env("BW_SESSION", token);
+        if let Some(_token) = &self.session_token {
+            cmd.env("BW_SESSION", _token);
         }
 
         let output = cmd
             .output()
             .await
-            .map_err(|e| BwError::CommandFailed(format!("Failed to execute bw list: {}", e)))?;
+            .map_err(|e| {
+                let error_msg = format!("Failed to execute bw list: {}", e);
+                crate::logger::Logger::error(&error_msg);
+                BwError::CommandFailed(error_msg)
+            })?;
 
         if !output.status.success() {
             let stderr = String::from_utf8_lossy(&output.stderr);
+            let sanitized_stderr = crate::logger::Logger::sanitize_message(&stderr);
             
             // Check for common error messages
             if stderr.contains("not logged in") {
+                crate::logger::Logger::error("Vault is not logged in");
                 return Err(BwError::NotLoggedIn);
             } else if stderr.contains("locked") {
+                crate::logger::Logger::error("Vault is locked");
                 return Err(BwError::VaultLocked);
             }
             
+            let error_msg = format!("bw list items failed: {}", sanitized_stderr);
+            crate::logger::Logger::error(&error_msg);
             return Err(BwError::CommandFailed(format!(
                 "bw list items failed: {}",
                 stderr
@@ -110,7 +149,9 @@ impl BitwardenCli {
         }
 
         let items: Vec<VaultItem> = serde_json::from_slice(&output.stdout).map_err(|e| {
-            BwError::ParseError(format!("Failed to parse vault items: {}", e))
+            let error_msg = format!("Failed to parse vault items: {}", e);
+            crate::logger::Logger::error(&error_msg);
+            BwError::ParseError(error_msg)
         })?;
 
         Ok(items)
@@ -120,16 +161,21 @@ impl BitwardenCli {
         let mut cmd = Command::new("bw");
         cmd.arg("sync");
 
-        if let Some(token) = &self.session_token {
-            cmd.env("BW_SESSION", token);
+        if let Some(_token) = &self.session_token {
+            cmd.env("BW_SESSION", _token);
         }
 
         let output = cmd.output().await.map_err(|e| {
-            BwError::CommandFailed(format!("Failed to execute bw sync: {}", e))
+            let error_msg = format!("Failed to execute bw sync: {}", e);
+            crate::logger::Logger::error(&error_msg);
+            BwError::CommandFailed(error_msg)
         })?;
 
         if !output.status.success() {
             let stderr = String::from_utf8_lossy(&output.stderr);
+            let sanitized_stderr = crate::logger::Logger::sanitize_message(&stderr);
+            let error_msg = format!("bw sync failed: {}", sanitized_stderr);
+            crate::logger::Logger::error(&error_msg);
             return Err(BwError::CommandFailed(format!(
                 "bw sync failed: {}",
                 stderr
@@ -159,18 +205,27 @@ impl BitwardenCli {
         let output = cmd
             .output()
             .await
-            .map_err(|e| BwError::CommandFailed(format!("Failed to execute bw unlock: {}", e)))?;
+            .map_err(|e| {
+                let error_msg = format!("Failed to execute bw unlock: {}", e);
+                crate::logger::Logger::error(&error_msg);
+                BwError::CommandFailed(error_msg)
+            })?;
 
         if !output.status.success() {
             let stderr = String::from_utf8_lossy(&output.stderr);
+            let sanitized_stderr = crate::logger::Logger::sanitize_message(&stderr);
             
             // Check for common error messages
             if stderr.contains("Invalid master password") {
+                crate::logger::Logger::error("Invalid master password provided");
                 return Err(BwError::CommandFailed("Invalid master password".to_string()));
             } else if stderr.contains("not logged in") {
+                crate::logger::Logger::error("Vault is not logged in");
                 return Err(BwError::NotLoggedIn);
             }
             
+            let error_msg = format!("Failed to unlock vault: {}", sanitized_stderr);
+            crate::logger::Logger::error(&error_msg);
             return Err(BwError::CommandFailed(format!(
                 "Failed to unlock vault: {}",
                 stderr.trim()
@@ -180,11 +235,12 @@ impl BitwardenCli {
         let session_token = String::from_utf8_lossy(&output.stdout).trim().to_string();
         
         if session_token.is_empty() {
-            return Err(BwError::CommandFailed(
-                "Unlock succeeded but no session token was returned".to_string()
-            ));
+            let error_msg = "Unlock succeeded but no session token was returned";
+            crate::logger::Logger::error(error_msg);
+            return Err(BwError::CommandFailed(error_msg.to_string()));
         }
 
+        crate::logger::Logger::info("Vault unlocked successfully (session token received)");
         Ok(session_token)
     }
 
@@ -195,25 +251,34 @@ impl BitwardenCli {
             .arg("totp")
             .arg(item_id);
 
-        if let Some(token) = &self.session_token {
-            cmd.env("BW_SESSION", token);
+        if let Some(_token) = &self.session_token {
+            cmd.env("BW_SESSION", _token);
         }
 
         let output = cmd
             .output()
             .await
-            .map_err(|e| BwError::CommandFailed(format!("Failed to execute bw get totp: {}", e)))?;
+            .map_err(|e| {
+                let error_msg = format!("Failed to execute bw get totp for item {}: {}", item_id, e);
+                crate::logger::Logger::error(&error_msg);
+                BwError::CommandFailed(format!("Failed to execute bw get totp: {}", e))
+            })?;
 
         if !output.status.success() {
             let stderr = String::from_utf8_lossy(&output.stderr);
+            let sanitized_stderr = crate::logger::Logger::sanitize_message(&stderr);
             
             // Check for common error messages
             if stderr.contains("not logged in") {
+                crate::logger::Logger::error("Vault is not logged in");
                 return Err(BwError::NotLoggedIn);
             } else if stderr.contains("locked") {
+                crate::logger::Logger::error("Vault is locked");
                 return Err(BwError::VaultLocked);
             }
             
+            let error_msg = format!("bw get totp failed for item {}: {}", item_id, sanitized_stderr);
+            crate::logger::Logger::error(&error_msg);
             return Err(BwError::CommandFailed(format!(
                 "bw get totp failed: {}",
                 stderr
@@ -223,9 +288,9 @@ impl BitwardenCli {
         let totp_code = String::from_utf8_lossy(&output.stdout).trim().to_string();
         
         if totp_code.is_empty() {
-            return Err(BwError::CommandFailed(
-                "TOTP code is empty".to_string()
-            ));
+            let error_msg = "TOTP code is empty";
+            crate::logger::Logger::error(error_msg);
+            return Err(BwError::CommandFailed(error_msg.to_string()));
         }
 
         Ok(totp_code)

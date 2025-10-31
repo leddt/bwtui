@@ -229,21 +229,31 @@ pub fn load_cache() -> Result<Option<CachedVaultData>> {
     let cache_path = get_cache_path()?;
 
     if !cache_path.exists() {
+        crate::logger::Logger::info("No cache file found");
         return Ok(None);
     }
 
     let data = fs::read(&cache_path).map_err(|e| {
-        BwError::CommandFailed(format!("Failed to read cache file: {}", e))
+        let error_msg = format!("Failed to read cache file: {}", e);
+        crate::logger::Logger::error(&error_msg);
+        BwError::CommandFailed(error_msg)
     })?;
 
     match bincode::deserialize::<CachedVaultData>(&data) {
         Ok(cached_data) => {
+            crate::logger::Logger::info(&format!("Successfully loaded cache with {} items", cached_data.items.len()));
             Ok(Some(cached_data))
         }
-        Err(_e) => {
+        Err(e) => {
             // If deserialization fails, delete the corrupted cache and return None
             // This handles format changes or corrupted files gracefully
-            let _ = fs::remove_file(&cache_path);
+            let error_msg = format!("Cache file corrupted or incompatible format: {}", e);
+            crate::logger::Logger::warn(&error_msg);
+            if let Err(remove_err) = fs::remove_file(&cache_path) {
+                crate::logger::Logger::error(&format!("Failed to remove corrupted cache file: {}", remove_err));
+            } else {
+                crate::logger::Logger::info("Corrupted cache file removed");
+            }
             Ok(None)
         }
     }
@@ -254,11 +264,15 @@ pub fn save_cache(data: &CachedVaultData) -> Result<()> {
     let cache_path = get_cache_path()?;
 
     let encoded = bincode::serialize(data).map_err(|e| {
-        BwError::CommandFailed(format!("Failed to serialize cache: {}", e))
+        let error_msg = format!("Failed to serialize cache: {}", e);
+        crate::logger::Logger::error(&error_msg);
+        BwError::CommandFailed(error_msg)
     })?;
 
     fs::write(&cache_path, encoded).map_err(|e| {
-        BwError::CommandFailed(format!("Failed to write cache file: {}", e))
+        let error_msg = format!("Failed to write cache file: {}", e);
+        crate::logger::Logger::error(&error_msg);
+        BwError::CommandFailed(error_msg)
     })?;
 
     Ok(())
@@ -270,8 +284,13 @@ pub fn clear_cache() -> Result<()> {
     
     if cache_path.exists() {
         fs::remove_file(&cache_path).map_err(|e| {
-            BwError::CommandFailed(format!("Failed to remove cache file: {}", e))
+            let error_msg = format!("Failed to remove cache file: {}", e);
+            crate::logger::Logger::error(&error_msg);
+            BwError::CommandFailed(error_msg)
         })?;
+        crate::logger::Logger::info("Cache file cleared");
+    } else {
+        crate::logger::Logger::info("No cache file to clear");
     }
     
     Ok(())

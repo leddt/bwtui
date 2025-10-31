@@ -111,13 +111,19 @@ impl App {
             let bw_cli = match BitwardenCli::new().await {
                 Ok(cli) => cli,
                 Err(crate::error::BwError::CliNotFound) => {
-                    let _ = sync_tx_clone.send(SyncResult::Error(
-                        "Bitwarden CLI not found. Please install: npm install -g @bitwarden/cli".to_string()
-                    ));
+                    let error_msg = "Bitwarden CLI not found. Please install: npm install -g @bitwarden/cli";
+                    crate::logger::Logger::error(&format!("Vault initialization failed: {}", error_msg));
+                    if let Err(e) = sync_tx_clone.send(SyncResult::Error(error_msg.to_string())) {
+                        crate::logger::Logger::error(&format!("Failed to send sync error: {}", e));
+                    }
                     return;
                 }
                 Err(e) => {
-                    let _ = sync_tx_clone.send(SyncResult::Error(format!("CLI error: {}", e)));
+                    let error_msg = format!("CLI error: {}", e);
+                    crate::logger::Logger::error(&format!("Vault initialization failed: {}", error_msg));
+                    if let Err(e) = sync_tx_clone.send(SyncResult::Error(error_msg.clone())) {
+                        crate::logger::Logger::error(&format!("Failed to send sync error: {}", e));
+                    }
                     return;
                 }
             };
@@ -126,7 +132,11 @@ impl App {
             let status = match bw_cli.check_status().await {
                 Ok(s) => s,
                 Err(e) => {
-                    let _ = sync_tx_clone.send(SyncResult::Error(format!("Failed to check vault status: {}", e)));
+                    let error_msg = format!("Failed to check vault status: {}", e);
+                    crate::logger::Logger::error(&format!("Vault initialization failed: {}", error_msg));
+                    if let Err(e) = sync_tx_clone.send(SyncResult::Error(error_msg.clone())) {
+                        crate::logger::Logger::error(&format!("Failed to send sync error: {}", e));
+                    }
                     return;
                 }
             };
@@ -135,20 +145,37 @@ impl App {
             match status {
                 cli::VaultStatus::Unlocked => {
                     // Already unlocked, proceed normally
-                    let _ = cli_tx.send(Ok(bw_cli.clone()));
+                    if let Err(e) = cli_tx.send(Ok(bw_cli.clone())) {
+                        crate::logger::Logger::error(&format!("Failed to send CLI initialization: {}", e));
+                    }
                     let result = match bw_cli.list_items().await {
-                        Ok(items) => SyncResult::Success(items),
-                        Err(e) => SyncResult::Error(format!("Failed to load vault items: {}", e)),
+                        Ok(items) => {
+                            crate::logger::Logger::info(&format!("Successfully loaded {} vault items", items.len()));
+                            SyncResult::Success(items)
+                        }
+                        Err(e) => {
+                            let error_msg = format!("Failed to load vault items: {}", e);
+                            crate::logger::Logger::error(&format!("Vault sync failed: {}", error_msg));
+                            SyncResult::Error(error_msg)
+                        }
                     };
-                    let _ = sync_tx_clone.send(result);
+                    if let Err(e) = sync_tx_clone.send(result) {
+                        crate::logger::Logger::error(&format!("Failed to send sync result: {}", e));
+                    }
                 }
                 cli::VaultStatus::Locked => {
                     // Vault is locked - prompt for password
-                    let _ = unlock_tx_clone.send(UnlockResult::PasswordRequired(bw_cli));
+                    crate::logger::Logger::info("Vault is locked, prompting for password");
+                    if let Err(e) = unlock_tx_clone.send(UnlockResult::PasswordRequired(bw_cli)) {
+                        crate::logger::Logger::error(&format!("Failed to send unlock prompt: {}", e));
+                    }
                 }
                 cli::VaultStatus::Unauthenticated => {
                     // Vault is not logged in - show error popup
-                    let _ = unlock_tx_clone.send(UnlockResult::NotLoggedIn);
+                    crate::logger::Logger::warn("Vault is not logged in");
+                    if let Err(e) = unlock_tx_clone.send(UnlockResult::NotLoggedIn) {
+                        crate::logger::Logger::error(&format!("Failed to send not logged in error: {}", e));
+                    }
                 }
             }
         });
@@ -260,6 +287,7 @@ impl App {
                     format!("✗ Failed to fetch TOTP: {}", error),
                     MessageLevel::Error,
                 );
+                crate::logger::Logger::error(&format!("Failed to fetch TOTP: {}", error));
             }
         }
     }
@@ -271,7 +299,11 @@ impl App {
             SyncResult::Success(items) => {
                 // Save cache (without secrets)
                 let cache_data = cache::CachedVaultData::from_vault_items(&items);
-                let _ = cache::save_cache(&cache_data); // Ignore cache save errors
+                if let Err(e) = cache::save_cache(&cache_data) {
+                    crate::logger::Logger::warn(&format!("Failed to save cache: {}", e));
+                } else {
+                    crate::logger::Logger::info("Cache saved successfully");
+                }
 
                 // Load items with secrets available
                 self.state.load_items_with_secrets(items);
@@ -282,6 +314,7 @@ impl App {
                     format!("✗ Sync failed: {}", error),
                     MessageLevel::Error,
                 );
+                crate::logger::Logger::error(&format!("Sync failed: {}", error));
             }
         }
     }
@@ -305,10 +338,17 @@ impl App {
                 match cli_clone.unlock(&password).await {
                     Ok(token) => {
                         let new_cli = BitwardenCli::with_session_token(token.clone());
-                        let _ = unlock_tx_clone.send(UnlockResult::Success(token, new_cli));
+                        crate::logger::Logger::info("Vault unlocked successfully");
+                        if let Err(e) = unlock_tx_clone.send(UnlockResult::Success(token, new_cli)) {
+                            crate::logger::Logger::error(&format!("Failed to send unlock success: {}", e));
+                        }
                     }
                     Err(e) => {
-                        let _ = unlock_tx_clone.send(UnlockResult::Error(e.to_string()));
+                        let error_msg = e.to_string();
+                        crate::logger::Logger::error(&format!("Failed to unlock vault: {}", error_msg));
+                        if let Err(e) = unlock_tx_clone.send(UnlockResult::Error(error_msg)) {
+                            crate::logger::Logger::error(&format!("Failed to send unlock error: {}", e));
+                        }
                     }
                 }
             });
@@ -350,10 +390,19 @@ impl App {
             let sync_tx_clone = self.sync_tx.clone();
             tokio::spawn(async move {
                 let result = match cli_clone.list_items().await {
-                    Ok(items) => SyncResult::Success(items),
-                    Err(e) => SyncResult::Error(format!("Failed to load vault items: {}", e)),
+                    Ok(items) => {
+                        crate::logger::Logger::info(&format!("Successfully loaded {} vault items", items.len()));
+                        SyncResult::Success(items)
+                    }
+                    Err(e) => {
+                        let error_msg = format!("Failed to load vault items: {}", e);
+                        crate::logger::Logger::error(&format!("Failed to load vault items: {}", error_msg));
+                        SyncResult::Error(error_msg)
+                    }
                 };
-                let _ = sync_tx_clone.send(result);
+                if let Err(e) = sync_tx_clone.send(result) {
+                    crate::logger::Logger::error(&format!("Failed to send vault items result: {}", e));
+                }
             });
         }
     }
@@ -394,9 +443,15 @@ impl App {
                                     let expires_at = ((now / 30) + 1) * 30; // Next 30-second boundary
                                     TotpResult::Success(code, expires_at)
                                 }
-                                Err(e) => TotpResult::Error(e.to_string()),
+                                Err(e) => {
+                                    let error_msg = e.to_string();
+                                    crate::logger::Logger::error(&format!("Failed to fetch TOTP for item {}: {}", item_id, error_msg));
+                                    TotpResult::Error(error_msg)
+                                }
                             };
-                            let _ = totp_tx_clone.send(result);
+                            if let Err(e) = totp_tx_clone.send(result) {
+                                crate::logger::Logger::error(&format!("Failed to send TOTP result: {}", e));
+                            }
                         });
                     } else {
                         self.state.set_status(
@@ -431,15 +486,29 @@ impl App {
             tokio::spawn(async move {
                 let result = match bw_cli_clone.sync().await {
                     Ok(_) => {
+                        crate::logger::Logger::info("Vault sync completed");
                         match bw_cli_clone.list_items().await {
-                            Ok(items) => SyncResult::Success(items),
-                            Err(e) => SyncResult::Error(format!("Failed to load items: {}", e)),
+                            Ok(items) => {
+                                crate::logger::Logger::info(&format!("Successfully loaded {} vault items after sync", items.len()));
+                                SyncResult::Success(items)
+                            }
+                            Err(e) => {
+                                let error_msg = format!("Failed to load items: {}", e);
+                                crate::logger::Logger::error(&format!("Vault refresh failed: {}", error_msg));
+                                SyncResult::Error(error_msg)
+                            }
                         }
                     }
-                    Err(e) => SyncResult::Error(e.to_string()),
+                    Err(e) => {
+                        let error_msg = e.to_string();
+                        crate::logger::Logger::error(&format!("Vault sync failed: {}", error_msg));
+                        SyncResult::Error(error_msg)
+                    }
                 };
                 
-                let _ = sync_tx_clone.send(result);
+                if let Err(e) = sync_tx_clone.send(result) {
+                    crate::logger::Logger::error(&format!("Failed to send sync result: {}", e));
+                }
             });
         }
     }
