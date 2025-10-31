@@ -75,12 +75,4 @@ impl UI {
     }
 }
 
-#[cfg(test)]
-mod tests {
-    #[test]
-    fn test_ui_creation() {
-        // This would require a terminal, so we just test the struct exists
-        assert!(true);
-    }
-}
 

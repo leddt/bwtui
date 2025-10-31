@@ -28,16 +28,4 @@ impl Default for ClipboardManager {
     }
 }
 
-#[cfg(test)]
-mod tests {
-    use super::*;
-
-    #[test]
-    fn test_clipboard_creation() {
-        // Clipboard might not be available in CI environments
-        if let Ok(_clipboard) = ClipboardManager::new() {
-            assert!(true);
-        }
-    }
-}
 

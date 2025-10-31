@@ -280,12 +280,184 @@ pub fn clear_cache() -> Result<()> {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::types::{VaultItem, ItemType, LoginData, Uri};
+
+    fn create_test_item_with_secrets(id: &str, name: &str, username: &str, password: &str) -> VaultItem {
+        VaultItem {
+            id: id.to_string(),
+            name: name.to_string(),
+            item_type: ItemType::Login,
+            login: Some(LoginData {
+                username: Some(username.to_string()),
+                password: Some(password.to_string()),
+                totp: Some("otpauth://totp/test".to_string()),
+                uris: Some(vec![Uri {
+                    uri: format!("https://example.com/{}", id),
+                    match_type: None,
+                }]),
+                password_revision_date: None,
+            }),
+            card: None,
+            identity: None,
+            notes: Some("Secret note".to_string()),
+            fields: Some(vec![]),
+            favorite: false,
+            folder_id: None,
+            organization_id: None,
+            revision_date: chrono::Utc::now(),
+            object: None,
+            creation_date: None,
+            deleted_date: None,
+            password_history: None,
+            attachments: None,
+            collection_ids: None,
+            reprompt: None,
+        }
+    }
 
     #[test]
     fn test_cache_data_creation() {
         let items = vec![];
         let cache = CachedVaultData::from_vault_items(&items);
         assert!(cache.items.is_empty());
+    }
+
+    #[test]
+    fn test_cache_round_trip_removes_secrets() {
+        let items = vec![
+            create_test_item_with_secrets("1", "Test Item", "user@example.com", "secret123"),
+        ];
+        
+        // Convert to cache (should remove secrets)
+        let cache = CachedVaultData::from_vault_items(&items);
+        assert_eq!(cache.items.len(), 1);
+        
+        // Verify secrets are not stored in cache
+        let cached_item = &cache.items[0];
+        assert_eq!(cached_item.name, "Test Item");
+        
+        if let Some(cached_login) = &cached_item.login {
+            assert_eq!(cached_login.username, Some("user@example.com".to_string()));
+            assert!(cached_login.has_password); // Should indicate password exists
+            assert!(cached_login.has_totp); // Should indicate TOTP exists
+        }
+        
+        // Convert back to VaultItems (should have placeholders for secrets)
+        let restored_items = cache.to_vault_items();
+        assert_eq!(restored_items.len(), 1);
+        
+        let restored_item = &restored_items[0];
+        assert_eq!(restored_item.name, "Test Item");
+        
+        if let Some(restored_login) = &restored_item.login {
+            assert_eq!(restored_login.username, Some("user@example.com".to_string()));
+            assert!(restored_login.password.is_none()); // Password should be removed
+            assert!(restored_login.totp.is_none()); // TOTP should be removed
+        }
+        
+        // Notes and fields should also be removed
+        assert!(restored_item.notes.is_none());
+        assert!(restored_item.fields.is_none());
+    }
+
+    #[test]
+    fn test_cache_preserves_metadata() {
+        let items = vec![
+            VaultItem {
+                id: "1".to_string(),
+                name: "Test Item".to_string(),
+                item_type: ItemType::Login,
+                login: None,
+                card: None,
+                identity: None,
+                notes: None,
+                fields: None,
+                favorite: true,
+                folder_id: Some("folder-123".to_string()),
+                organization_id: Some("org-456".to_string()),
+                revision_date: chrono::DateTime::parse_from_rfc3339("2023-01-01T00:00:00Z").unwrap().with_timezone(&chrono::Utc),
+                object: None,
+                creation_date: None,
+                deleted_date: None,
+                password_history: None,
+                attachments: None,
+                collection_ids: None,
+                reprompt: None,
+            },
+        ];
+        
+        let cache = CachedVaultData::from_vault_items(&items);
+        let restored_items = cache.to_vault_items();
+        
+        let restored_item = &restored_items[0];
+        assert_eq!(restored_item.id, "1");
+        assert_eq!(restored_item.name, "Test Item");
+        assert_eq!(restored_item.favorite, true);
+        assert_eq!(restored_item.folder_id, Some("folder-123".to_string()));
+        assert_eq!(restored_item.organization_id, Some("org-456".to_string()));
+        assert_eq!(restored_item.revision_date.to_rfc3339(), "2023-01-01T00:00:00+00:00");
+    }
+
+    #[test]
+    fn test_cache_with_multiple_item_types() {
+        let items = vec![
+            VaultItem {
+                id: "1".to_string(),
+                name: "Login Item".to_string(),
+                item_type: ItemType::Login,
+                login: Some(LoginData {
+                    username: Some("user".to_string()),
+                    password: Some("pass".to_string()),
+                    totp: None,
+                    uris: None,
+                    password_revision_date: None,
+                }),
+                card: None,
+                identity: None,
+                notes: None,
+                fields: None,
+                favorite: false,
+                folder_id: None,
+                organization_id: None,
+                revision_date: chrono::Utc::now(),
+                object: None,
+                creation_date: None,
+                deleted_date: None,
+                password_history: None,
+                attachments: None,
+                collection_ids: None,
+                reprompt: None,
+            },
+            VaultItem {
+                id: "2".to_string(),
+                name: "Secure Note".to_string(),
+                item_type: ItemType::SecureNote,
+                login: None,
+                card: None,
+                identity: None,
+                notes: Some("Note content".to_string()),
+                fields: None,
+                favorite: true,
+                folder_id: None,
+                organization_id: None,
+                revision_date: chrono::Utc::now(),
+                object: None,
+                creation_date: None,
+                deleted_date: None,
+                password_history: None,
+                attachments: None,
+                collection_ids: None,
+                reprompt: None,
+            },
+        ];
+        
+        let cache = CachedVaultData::from_vault_items(&items);
+        let restored_items = cache.to_vault_items();
+        
+        assert_eq!(restored_items.len(), 2);
+        assert_eq!(restored_items[0].item_type, ItemType::Login);
+        assert_eq!(restored_items[1].item_type, ItemType::SecureNote);
+        assert_eq!(restored_items[1].favorite, true);
     }
 }
 

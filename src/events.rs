@@ -273,13 +273,3 @@ impl Default for EventHandler {
     }
 }
 
-#[cfg(test)]
-mod tests {
-    use super::*;
-
-    #[test]
-    fn test_event_handler_creation() {
-        let _handler = EventHandler::new();
-        assert!(true);
-    }
-}

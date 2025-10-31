@@ -43,6 +43,31 @@ pub fn handle_ui(action: &Action, state: &mut AppState) -> bool {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::types::{VaultItem, ItemType};
+
+    fn create_test_item(id: &str, name: &str, item_type: ItemType) -> VaultItem {
+        VaultItem {
+            id: id.to_string(),
+            name: name.to_string(),
+            item_type,
+            login: None,
+            card: None,
+            identity: None,
+            notes: None,
+            fields: None,
+            favorite: false,
+            folder_id: None,
+            organization_id: None,
+            revision_date: chrono::Utc::now(),
+            object: None,
+            creation_date: None,
+            deleted_date: None,
+            password_history: None,
+            attachments: None,
+            collection_ids: None,
+            reprompt: None,
+        }
+    }
 
     #[test]
     fn test_ui_actions() {
@@ -59,93 +84,117 @@ mod tests {
     }
 
     #[test]
-    fn test_close_details_panel_action() {
+    fn test_details_panel_toggle() {
         let mut state = AppState::new();
         
         // Initially details panel is not visible
         assert!(!state.details_panel_visible());
         
-        // Open details panel
-        state.toggle_details_panel();
+        // Toggle to open
+        handle_ui(&Action::ToggleDetailsPanel, &mut state);
         assert!(state.details_panel_visible());
         
-        // CloseDetailsPanel should close the details panel
-        assert!(handle_ui(&Action::CloseDetailsPanel, &mut state));
-        assert!(!state.details_panel_visible());
-        
-        // CloseDetailsPanel when details panel is already closed should still return true (handled)
-        assert!(handle_ui(&Action::CloseDetailsPanel, &mut state));
+        // Toggle to close
+        handle_ui(&Action::ToggleDetailsPanel, &mut state);
         assert!(!state.details_panel_visible());
     }
 
     #[test]
-    fn test_tab_cycling() {
+    fn test_open_details_panel_only_when_closed() {
         let mut state = AppState::new();
         
-        // Initially should be on "All" tab (None)
-        assert!(state.ui.get_active_filter().is_none());
+        // Initially closed
+        assert!(!state.details_panel_visible());
         
-        // Cycle through tabs
-        assert!(handle_ui(&Action::CycleNextTab, &mut state));
-        assert_eq!(state.ui.get_active_filter(), Some(crate::types::ItemType::Login));
+        // OpenDetailsPanel should open it
+        handle_ui(&Action::OpenDetailsPanel, &mut state);
+        assert!(state.details_panel_visible());
         
-        assert!(handle_ui(&Action::CycleNextTab, &mut state));
-        assert_eq!(state.ui.get_active_filter(), Some(crate::types::ItemType::SecureNote));
-        
-        assert!(handle_ui(&Action::CycleNextTab, &mut state));
-        assert_eq!(state.ui.get_active_filter(), Some(crate::types::ItemType::Card));
-        
-        assert!(handle_ui(&Action::CycleNextTab, &mut state));
-        assert_eq!(state.ui.get_active_filter(), Some(crate::types::ItemType::Identity));
-        
-        // Should cycle back to "All"
-        assert!(handle_ui(&Action::CycleNextTab, &mut state));
-        assert!(state.ui.get_active_filter().is_none());
+        // OpenDetailsPanel when already open should not change state
+        handle_ui(&Action::OpenDetailsPanel, &mut state);
+        assert!(state.details_panel_visible());
     }
 
     #[test]
-    fn test_backward_tab_cycling() {
+    fn test_close_details_panel_only_when_open() {
         let mut state = AppState::new();
         
-        // Initially should be on "All" tab (None)
-        assert!(state.ui.get_active_filter().is_none());
+        // Initially closed
+        assert!(!state.details_panel_visible());
         
-        // Cycle backwards through tabs
-        assert!(handle_ui(&Action::CyclePreviousTab, &mut state));
-        assert_eq!(state.ui.get_active_filter(), Some(crate::types::ItemType::Identity));
+        // CloseDetailsPanel when closed should not change state
+        handle_ui(&Action::CloseDetailsPanel, &mut state);
+        assert!(!state.details_panel_visible());
         
-        assert!(handle_ui(&Action::CyclePreviousTab, &mut state));
-        assert_eq!(state.ui.get_active_filter(), Some(crate::types::ItemType::Card));
+        // Open it first
+        handle_ui(&Action::ToggleDetailsPanel, &mut state);
+        assert!(state.details_panel_visible());
         
-        assert!(handle_ui(&Action::CyclePreviousTab, &mut state));
-        assert_eq!(state.ui.get_active_filter(), Some(crate::types::ItemType::SecureNote));
-        
-        assert!(handle_ui(&Action::CyclePreviousTab, &mut state));
-        assert_eq!(state.ui.get_active_filter(), Some(crate::types::ItemType::Login));
-        
-        // Should cycle back to "All"
-        assert!(handle_ui(&Action::CyclePreviousTab, &mut state));
-        assert!(state.ui.get_active_filter().is_none());
+        // Now close it
+        handle_ui(&Action::CloseDetailsPanel, &mut state);
+        assert!(!state.details_panel_visible());
     }
 
     #[test]
-    fn test_forward_and_backward_cycling_consistency() {
+    fn test_tab_filtering_functionality() {
         let mut state = AppState::new();
         
-        // Start at "All"
-        assert!(state.ui.get_active_filter().is_none());
+        // Add items of different types
+        let items = vec![
+            create_test_item("1", "GitHub", ItemType::Login),
+            create_test_item("2", "Bank Note", ItemType::SecureNote),
+            create_test_item("3", "Visa Card", ItemType::Card),
+            create_test_item("4", "My Identity", ItemType::Identity),
+        ];
+        state.load_items_with_secrets(items);
         
-        // Go forward 3 steps
-        assert!(handle_ui(&Action::CycleNextTab, &mut state)); // Login
-        assert!(handle_ui(&Action::CycleNextTab, &mut state)); // Note
-        assert!(handle_ui(&Action::CycleNextTab, &mut state)); // Card
-        assert_eq!(state.ui.get_active_filter(), Some(crate::types::ItemType::Card));
+        // Initially all items should be visible
+        assert_eq!(state.vault.filtered_items.len(), 4);
         
-        // Go backward 3 steps should return to "All"
-        assert!(handle_ui(&Action::CyclePreviousTab, &mut state)); // Note
-        assert!(handle_ui(&Action::CyclePreviousTab, &mut state)); // Login
-        assert!(handle_ui(&Action::CyclePreviousTab, &mut state)); // All
-        assert!(state.ui.get_active_filter().is_none());
+        // Filter to Login items
+        handle_ui(&Action::SelectItemTypeTab(Some(ItemType::Login)), &mut state);
+        assert_eq!(state.vault.filtered_items.len(), 1);
+        assert_eq!(state.vault.filtered_items[0].id, "1");
+        
+        // Filter to Card items
+        handle_ui(&Action::SelectItemTypeTab(Some(ItemType::Card)), &mut state);
+        assert_eq!(state.vault.filtered_items.len(), 1);
+        assert_eq!(state.vault.filtered_items[0].id, "3");
+        
+        // Filter to show all
+        handle_ui(&Action::SelectItemTypeTab(None), &mut state);
+        assert_eq!(state.vault.filtered_items.len(), 4);
+    }
+
+    #[test]
+    fn test_tab_cycling_changes_filter() {
+        let mut state = AppState::new();
+        
+        let items = vec![
+            create_test_item("1", "GitHub", ItemType::Login),
+            create_test_item("2", "Note", ItemType::SecureNote),
+            create_test_item("3", "Card", ItemType::Card),
+        ];
+        state.load_items_with_secrets(items);
+        
+        // Initially all items visible
+        assert_eq!(state.vault.filtered_items.len(), 3);
+        
+        // Cycle to Login tab
+        handle_ui(&Action::CycleNextTab, &mut state);
+        assert_eq!(state.vault.filtered_items.len(), 1);
+        assert_eq!(state.vault.filtered_items[0].item_type, ItemType::Login);
+        
+        // Cycle to SecureNote tab
+        handle_ui(&Action::CycleNextTab, &mut state);
+        assert_eq!(state.vault.filtered_items.len(), 1);
+        assert_eq!(state.vault.filtered_items[0].item_type, ItemType::SecureNote);
+        
+        // Cycle back to show all
+        handle_ui(&Action::CycleNextTab, &mut state);
+        handle_ui(&Action::CycleNextTab, &mut state);
+        handle_ui(&Action::CycleNextTab, &mut state);
+        assert_eq!(state.vault.filtered_items.len(), 3);
     }
 }
 

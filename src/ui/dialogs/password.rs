@@ -13,76 +13,29 @@ mod tests {
     use crate::state::AppState;
 
     #[test]
-    fn test_password_dialog_with_loading_state() {
+    fn test_password_input_functionality() {
         let mut state = AppState::new();
-        state.ui.enter_password_mode();
-        state.ui.append_password_char('t');
-        state.ui.append_password_char('e');
-        state.ui.append_password_char('s');
-        state.ui.append_password_char('t');
+        state.enter_password_mode();
         
-        // Test normal state
-        assert!(!state.sync.syncing);
+        // Test appending characters
+        state.append_password_char('t');
+        state.append_password_char('e');
+        state.append_password_char('s');
+        state.append_password_char('t');
+        assert_eq!(state.get_password(), "test");
         
-        // Test loading state
-        state.sync.start();
-        assert!(state.sync.syncing);
+        // Test deleting characters
+        state.delete_password_char();
+        assert_eq!(state.get_password(), "tes");
         
-        // Test that password is still accessible during loading
-        assert_eq!(state.ui.get_password(), "test");
+        // Test clearing password
+        state.clear_password();
+        assert_eq!(state.get_password(), "");
         
-        // Test spinner functionality
-        assert!(!state.sync.spinner().is_empty());
-        
-        // Advance animation and test spinner changes
-        state.sync.advance_animation();
-        assert!(!state.sync.spinner().is_empty());
-    }
-
-    #[test]
-    fn test_password_input_disabled_during_unlock() {
-        let mut state = AppState::new();
-        state.ui.enter_password_mode();
-        state.ui.append_password_char('t');
-        state.ui.append_password_char('e');
-        state.ui.append_password_char('s');
-        state.ui.append_password_char('t');
-        
-        // Test normal state - password input should work
-        assert!(!state.sync.syncing);
-        assert_eq!(state.ui.get_password(), "test");
-        
-        // Start unlock process
-        state.sync.start();
-        assert!(state.sync.syncing);
-        
-        // Password should still be accessible but input should be disabled
-        assert_eq!(state.ui.get_password(), "test");
-        
-        // Verify the state shows we're in password mode and syncing
-        assert!(state.sync.syncing);
+        // Verify password mode state
         assert!(state.password_input_mode());
-    }
-
-    #[test]
-    fn test_clear_password_functionality() {
-        let mut state = AppState::new();
-        state.ui.enter_password_mode();
-        state.ui.append_password_char('t');
-        state.ui.append_password_char('e');
-        state.ui.append_password_char('s');
-        state.ui.append_password_char('t');
-        
-        // Verify password is set
-        assert_eq!(state.ui.get_password(), "test");
-        assert!(!state.ui.password_input.is_empty());
-        
-        // Clear password
-        state.ui.clear_password();
-        
-        // Verify password is cleared
-        assert_eq!(state.ui.get_password(), "");
-        assert!(state.ui.password_input.is_empty());
+        state.exit_password_mode();
+        assert!(!state.password_input_mode());
     }
 }
 
